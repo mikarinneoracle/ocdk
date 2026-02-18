@@ -1,0 +1,13 @@
+{
+  "language": "typescript",
+  "app": "npm run --silent build && node bin/app.js",
+  "projectId": "testimonials-oci",
+  "terraformProviders": [
+    "oci@~> 5.0"
+  ],
+  "terraformModules": [],
+  "context": {
+    "excludeStackIdFromLogicalIds": true,
+    "allowSepCharsInLogicalIds": true
+  }
+}

@@ -1,0 +1,34 @@
+{
+  "name": "oci-ocdk-test-function",
+  "version": "1.0.0",
+  "description": "OCI OCDK stack for testing Java function",
+  "main": "lib/index.js",
+  "scripts": {
+    "build": "tsc",
+    "watch": "tsc -w",
+    "ocdk": "cdktf",
+    "deploy": "cdktf deploy",
+    "diff": "cdktf diff",
+    "destroy": "cdktf destroy",
+    "get": "cdktf get",
+    "synth": "cdktf synth",
+    "list": "cdktf list"
+  },
+  "keywords": [
+    "oci",
+    "cdk",
+    "terraform",
+    "infrastructure-as-code"
+  ],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "cdktf": "^0.20.0",
+    "constructs": "^10.0.0"
+  },
+  "devDependencies": {
+    "@cdktf/provider-oci": "^9.0.0",
+    "@types/node": "^18.0.0",
+    "typescript": "^5.0.0"
+  }
+}

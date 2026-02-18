@@ -1,0 +1,11 @@
+*.js
+!jest.config.js
+*.d.ts
+node_modules
+*.log
+cdktf.out
+.terraform
+.terraform.lock.hcl
+.idea
+*.iml
+.vscode

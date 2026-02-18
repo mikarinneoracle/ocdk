@@ -30,7 +30,7 @@ Infrastructure as Code for OCI Functions, API Gateway, Object Storage, Vault, an
 ### Setup
 
 ```bash
-cd ocdk
+cd ~/projects/ocdk
 npm install
 npm run get  # Download OCI provider (runs: cdktf get)
 # This generates TypeScript types for OCI resources including ArtifactsContainerRepository
@@ -157,8 +157,7 @@ ocdk/
    - Repository name configurable via `OCI_OCIR_REPOSITORY_NAME`
 
 2. **Object Storage Buckets**
-   - `testimonials-html-templates` - HTML templates
-   - `testimonials-db-wallet` - Database wallet
+   - Configurable bucket names for templates and data
 
 3. **OCI Vault**
    - Secrets for DB password, wallet password, client secret

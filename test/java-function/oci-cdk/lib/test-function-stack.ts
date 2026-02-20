@@ -441,12 +441,12 @@ fi`;
     const apiDeployment = new ApigatewayDeployment(this, 'ApiDeployment', {
       compartmentId: config.compartmentId,
       gatewayId: apiGateway.id,
-      pathPrefix: '/test',
+      pathPrefix: '',
       displayName: `${id}-deployment`,
       specification: {
         routes: [
           {
-            path: '/',
+            path: '/{path*}',
             methods: ['GET', 'POST', 'OPTIONS'],
             backend: {
               type: 'ORACLE_FUNCTIONS_BACKEND',
@@ -472,7 +472,7 @@ fi`;
     });
 
     new TerraformOutput(this, 'function_invoke_url', {
-      value: `https://${apiGateway.hostname}/test`,
+      value: `https://${apiGateway.hostname}`,
       description: 'Base URL to invoke the test function (use ?action=hello|echo|info)',
     });
 

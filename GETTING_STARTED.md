@@ -86,7 +86,7 @@ npm run get  # This runs: cdktf get
 ### Option B: Create New Project from Test Template
 
 ```bash
-cd ~/projects/ocdk/test/java-function/oci-ocdk
+cd ~/projects/ocdk/test/java-function/oci-cdk
 
 # Install dependencies
 npm install
@@ -342,7 +342,7 @@ oci setup config
 ## Next Steps
 
 - **Add more resources**: Edit `lib/oci-stack.ts` to add Functions, API Gateway, Vault, etc.
-- **Use test template**: Check `test/java-function/oci-ocdk/` for a complete example
+- **Use test template**: Check `test/java-function/oci-cdk/` for a complete example
 - **Read documentation**: See `README.md` for more details
 - **Check architecture**: See `ARCHITECTURE.md` in test directory for design patterns
 
@@ -359,7 +359,7 @@ CDK-style commands (run from the **OCDK project root**):
 | `npm run ocdk -- list` or `npm run list` | List stacks |
 | `npm run ocdk -- get` or `npm run get` | Download Terraform providers |
 
-**Note:** `npx ocdk` does not work (no published package). Use `npm run ocdk -- <command>` or `npm run <command>` from the project root. For the test app in `test/java-function/oci-ocdk/`, run `npm run deploy` from that directory.
+**Note:** `npx ocdk` does not work (no published package). Use `npm run ocdk -- <command>` or `npm run <command>` from the project root. For the test app in `test/java-function/oci-cdk/`, run `npm run deploy` from that directory.
 
 Other:
 | `npm install` | Install dependencies (includes cdktf-cli) |

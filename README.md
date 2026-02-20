@@ -135,7 +135,7 @@ CDK-style commands (same as AWS CDK):
 - **`npm run deploy`**, **`npm run diff`**, **`npm run synth`**, etc. – same as above
 - **`node bin/ocdk.js deploy`** – direct run of the CLI script
 
-**Note:** `npx ocdk` does not work (there is no published `ocdk` package). Use the commands above from the project root. For the test app in `test/java-function/oci-ocdk/`, use **`npm run deploy`** there (that project has its own cdktf scripts).
+**Note:** `npx ocdk` does not work (there is no published `ocdk` package). Use the commands above from the project root. For the test app in `test/java-function/oci-cdk/`, use **`npm run deploy`** there (that project has its own cdktf scripts).
 
 **Other:**
 - `npm run build` – Compile TypeScript

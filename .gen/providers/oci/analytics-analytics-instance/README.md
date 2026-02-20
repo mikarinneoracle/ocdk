@@ -1,0 +1,3 @@
+# `oci_analytics_analytics_instance`
+
+Refer to the Terraform Registry for docs: [`oci_analytics_analytics_instance`](https://registry.terraform.io/providers/hashicorp/oci/5.47.0/docs/resources/analytics_analytics_instance).

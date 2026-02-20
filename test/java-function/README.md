@@ -16,7 +16,7 @@ test/java-function/
 │   ├── lib/
 │   ├── package.json
 │   └── tsconfig.json
-├── oci-ocdk/              # OCI OCDK infrastructure
+├── oci-cdk/               # OCI CDK infrastructure
 │   ├── bin/
 │   ├── lib/
 │   ├── config/
@@ -171,7 +171,7 @@ This creates `target/test-function-oci-1.0.0.jar` with only OCI dependencies.
 ### Deploy OCI Infrastructure
 
 ```bash
-cd oci-ocdk
+cd oci-cdk
 npm install
 npm run get  # Download OCI provider
 npm run build
@@ -256,6 +256,6 @@ npm run destroy
 ### OCI
 
 ```bash
-cd oci-ocdk
+cd oci-cdk
 npm run destroy
 ```

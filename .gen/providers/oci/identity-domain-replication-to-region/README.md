@@ -1,0 +1,3 @@
+# `oci_identity_domain_replication_to_region`
+
+Refer to the Terraform Registry for docs: [`oci_identity_domain_replication_to_region`](https://registry.terraform.io/providers/hashicorp/oci/5.47.0/docs/resources/identity_domain_replication_to_region).

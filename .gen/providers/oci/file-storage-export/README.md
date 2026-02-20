@@ -1,0 +1,3 @@
+# `oci_file_storage_export`
+
+Refer to the Terraform Registry for docs: [`oci_file_storage_export`](https://registry.terraform.io/providers/hashicorp/oci/5.47.0/docs/resources/file_storage_export).

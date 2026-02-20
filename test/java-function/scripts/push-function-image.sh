@@ -4,7 +4,7 @@ set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 FUNCTION_DIR="${SCRIPT_DIR}/../function-code"
-OCDK_DIR="${SCRIPT_DIR}/../oci-ocdk"
+OCDK_DIR="${SCRIPT_DIR}/../oci-cdk"
 
 # Configuration from environment
 REGION="${OCI_REGION:-eu-frankfurt-1}"

@@ -1,0 +1,3 @@
+# `oci_queue_queue`
+
+Refer to the Terraform Registry for docs: [`oci_queue_queue`](https://registry.terraform.io/providers/hashicorp/oci/5.47.0/docs/resources/queue_queue).

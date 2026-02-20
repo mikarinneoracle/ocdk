@@ -9,7 +9,7 @@ function-code/target/
 
 # CDK/CDKTF outputs
 aws-cdk/cdk.out/
-oci-ocdk/cdktf.out/
+oci-cdk/cdktf.out/
 **/.terraform/
 **/.terraform.lock.hcl
 

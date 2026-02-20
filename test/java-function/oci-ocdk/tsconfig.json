@@ -22,5 +22,5 @@
     "rootDir": "."
   },
   "include": ["**/*.ts"],
-  "exclude": ["node_modules", "cdktf.out"]
+  "exclude": ["node_modules", "cdktf.out", "**/*.d.ts"]
 }

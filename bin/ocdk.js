@@ -1,0 +1,55 @@
+#!/usr/bin/env node
+/**
+ * OCDK CLI - CDK-style commands (same as CDK: ocdk deploy, ocdk diff, etc.)
+ * Forwards to cdktf via npm run when possible, otherwise runs cdktf from PATH.
+ */
+
+const { spawnSync } = require('child_process');
+const path = require('path');
+
+const root = path.join(__dirname, '..');
+const args = process.argv.slice(2);
+const command = args[0];
+
+const npmRunCommands = ['deploy', 'diff', 'synth', 'destroy', 'list', 'get'];
+
+if (!command || command.startsWith('-')) {
+  console.log(`
+OCDK (OCI CDK) - CDK-style commands
+
+Usage: ocdk <command> [options]
+
+Commands (same as CDK):
+  deploy      Deploy the stack
+  diff        Compare stack with current state
+  synth       Synthesize Terraform
+  destroy     Destroy the stack
+  list        List stacks
+  get         Generate provider bindings
+
+Examples:
+  ocdk deploy
+  ocdk diff
+  ocdk deploy --auto-approve
+`);
+  process.exit(args[0] === '--help' || args[0] === '-h' ? 0 : 1);
+}
+
+// Use npm run <command> so we use project's cdktf without requiring global CLI
+if (npmRunCommands.includes(command)) {
+  const result = spawnSync('npm', ['run', '--silent', command, '--', ...args.slice(1)], {
+    stdio: 'inherit',
+    cwd: root,
+    shell: true,
+  });
+  process.exit(result.status ?? 1);
+}
+
+// Other commands (watch, output, login, ...): run cdktf from PATH
+const result = spawnSync('cdktf', [command, ...args.slice(1)], {
+  stdio: 'inherit',
+  cwd: root,
+  shell: true,
+});
+
+process.exit(result.status ?? 1);

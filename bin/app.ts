@@ -4,8 +4,6 @@ import { OciStack } from '../lib/oci-stack';
 import { ociConfig } from '../config/oci-config';
 
 const app = new App();
-
-// Stack name can be customized via environment variable or default to 'oci-stack'
 const stackName = process.env.OCI_STACK_NAME || 'oci-stack';
 
 new OciStack(app, stackName, {

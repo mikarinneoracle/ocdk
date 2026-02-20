@@ -4,7 +4,6 @@ import { TestFunctionStack } from '../lib/test-function-stack';
 import { ociConfig } from '../config/oci-config';
 
 const app = new App();
-
 const stackName = process.env.OCI_STACK_NAME || 'test-function-stack';
 
 new TestFunctionStack(app, stackName, {

@@ -1,0 +1,12 @@
+{
+  "routes": [
+    {
+      "path": "/",
+      "methods": ["GET", "POST", "OPTIONS"],
+      "backend": {
+        "type": "ORACLE_FUNCTIONS_BACKEND",
+        "functionId": "<FUNCTION_OCID>"
+      }
+    }
+  ]
+}

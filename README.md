@@ -119,17 +119,28 @@ npm run list  # or: npm run ocdk list
 
 ## Available Commands
 
-All commands use `npm run <command>`:
+CDK-style commands (same as AWS CDK):
 
-- `npm run build` - Compile TypeScript
-- `npm run watch` - Watch mode for TypeScript compilation
-- `npm run deploy` - Deploy infrastructure (`cdktf deploy`)
-- `npm run diff` - Preview changes (`cdktf diff`)
-- `npm run destroy` - Destroy infrastructure (`cdktf destroy`)
-- `npm run get` - Download Terraform providers (`cdktf get`)
-- `npm run synth` - Synthesize Terraform code (`cdktf synth`)
-- `npm run list` - List stacks (`cdktf list`)
-- `npm run ocdk <command>` - Direct access to cdktf CLI
+| Command | Description |
+|---------|-------------|
+| `ocdk deploy` | Deploy the stack |
+| `ocdk diff` | Preview changes (plan) |
+| `ocdk synth` | Synthesize Terraform |
+| `ocdk destroy` | Destroy the stack |
+| `ocdk list` | List stacks |
+| `ocdk get` | Generate provider bindings |
+
+**How to run (from the OCDK project root):**
+- **`npm run ocdk -- deploy`** – CDK-style: runs `ocdk deploy` (same as `npm run deploy`)
+- **`npm run deploy`**, **`npm run diff`**, **`npm run synth`**, etc. – same as above
+- **`node bin/ocdk.js deploy`** – direct run of the CLI script
+
+**Note:** `npx ocdk` does not work (there is no published `ocdk` package). Use the commands above from the project root. For the test app in `test/java-function/oci-ocdk/`, use **`npm run deploy`** there (that project has its own cdktf scripts).
+
+**Other:**
+- `npm run build` – Compile TypeScript
+- `npm run watch` – Watch mode for TypeScript
+- `npm run cdktf -- <args>` – Pass through to cdktf (e.g. `npm run cdktf -- output`)
 
 ## Structure
 

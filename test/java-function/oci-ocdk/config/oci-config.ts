@@ -1,13 +1,17 @@
 /**
  * OCI Configuration for Test Function
- * 
- * Set these via environment variables or update defaults:
- * - OCI_COMPARTMENT_ID
- * - OCI_TENANCY_ID
- * - OCI_REGION
- * - OCI_NAMESPACE
- * - OCI_OCIR_COMPARTMENT_ID (for OCIR repository)
- * - OCI_OCIR_REPOSITORY_NAME (for OCIR repository name)
+ *
+ * Required env vars:
+ * - OCI_NAMESPACE – tenancy object storage namespace (oci os ns get). Required for OCIR image URL.
+ *
+ * Required (or use OCI_COMPARTMENT_ID for both):
+ * - OCI_OCIR_COMPARTMENT_ID – compartment for the OCIR repository (cannot be root).
+ *
+ * Optional / defaults:
+ * - OCI_COMPARTMENT_ID, OCI_TENANCY_ID, OCI_REGION, OCI_OCIR_REPOSITORY_NAME
+ *
+ * The Functions resource requires the container image to already exist in OCIR
+ * (e.g. build and push with scripts/build-docker.sh and scripts/deploy-oci-function.sh).
  */
 
 export interface OciBackendConfig {
@@ -34,35 +38,51 @@ export interface OciConfig {
 
 const backendType = (process.env.OCI_STATE_BACKEND_TYPE || 'local') as 'oci' | 'http' | 'local';
 
-const backendConfig: OciBackendConfig | undefined = backendType === 'local' 
-  ? undefined 
+const backendConfig: OciBackendConfig | undefined = backendType === 'local'
+  ? undefined
   : backendType === 'oci'
-  ? {
-      type: 'oci',
-      bucket: process.env.OCI_STATE_BUCKET || 'tf-state',
-      key: process.env.OCI_STATE_KEY || 'test-function-stack/terraform.tfstate',
-    }
-  : {
-      type: 'http',
-      address: process.env.OCI_STATE_HTTP_ADDRESS || '',
-      updateMethod: process.env.OCI_STATE_HTTP_UPDATE_METHOD || 'PUT',
-      lockAddress: process.env.OCI_STATE_HTTP_LOCK_ADDRESS,
-      unlockAddress: process.env.OCI_STATE_HTTP_UNLOCK_ADDRESS,
-    };
+    ? {
+        type: 'oci',
+        bucket: process.env.OCI_STATE_BUCKET || 'tf-state',
+        key: process.env.OCI_STATE_KEY || 'test-function-stack/terraform.tfstate',
+      }
+    : {
+        type: 'http',
+        address: process.env.OCI_STATE_HTTP_ADDRESS || '',
+        updateMethod: process.env.OCI_STATE_HTTP_UPDATE_METHOD || 'PUT',
+        lockAddress: process.env.OCI_STATE_HTTP_LOCK_ADDRESS,
+        unlockAddress: process.env.OCI_STATE_HTTP_UNLOCK_ADDRESS,
+      };
 
 const ocirCompartmentId = process.env.OCI_OCIR_COMPARTMENT_ID || process.env.OCI_COMPARTMENT_ID;
 
-if (!ocirCompartmentId || ocirCompartmentId.includes('root')) {
-  console.warn('⚠️  WARNING: OCI_OCIR_COMPARTMENT_ID not set or set to root compartment.');
-  console.warn('   Please set OCI_OCIR_COMPARTMENT_ID to your home compartment OCID.');
+if (!ocirCompartmentId) {
+  throw new Error(
+    'OCI_OCIR_COMPARTMENT_ID is required (or set OCI_COMPARTMENT_ID to use the same compartment for everything). ' +
+    'OCIR repositories cannot be created in the root compartment.'
+  );
+}
+if (ocirCompartmentId.includes('root')) {
+  throw new Error(
+    'OCI_OCIR_COMPARTMENT_ID cannot be the root compartment. ' +
+    'Set it to a non-root compartment OCID (e.g. your home compartment).'
+  );
+}
+
+const namespace = process.env.OCI_NAMESPACE || '';
+if (!namespace || namespace === 'your-namespace') {
+  throw new Error(
+    'OCI_NAMESPACE is required. Set it to your tenancy object storage namespace (e.g. run: oci os ns get). ' +
+    'Example: export OCI_NAMESPACE="your-actual-namespace"'
+  );
 }
 
 export const ociConfig: OciConfig = {
   compartmentId: process.env.OCI_COMPARTMENT_ID || 'ocid1.compartment.oc1..aaaaaaa...',
-  ocirCompartmentId: ocirCompartmentId,
+  ocirCompartmentId: ocirCompartmentId || undefined,
   tenancyId: process.env.OCI_TENANCY_ID || 'ocid1.tenancy.oc1..aaaaaaa...',
   region: process.env.OCI_REGION || 'eu-frankfurt-1',
-  namespace: process.env.OCI_NAMESPACE || 'your-namespace',
+  namespace,
   functionAppName: 'test-function-app',
   functionName: 'test-java-function',
   ocirRepositoryName: process.env.OCI_OCIR_REPOSITORY_NAME || 'test-java-function',

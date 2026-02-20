@@ -122,6 +122,16 @@ curl "https://<api-id>.execute-api.<region>.amazonaws.com/prod/?action=info"
 
 ## OCI OCDK Setup
 
+The OCI stack creates:
+
+- **VCN** (10.0.0.0/16) with **public subnet** (10.0.1.0/24) and **private subnet** (10.0.2.0/24)
+- **API Gateway** in the public subnet (PUBLIC endpoint)
+- **Functions application** in the private subnet
+- **Function** linked to the application (image from OCIR; deploy code with `deploy-oci-function.sh`)
+- **API Gateway deployment** with path prefix `/test` and a single route to the function
+
+Vault and secrets are not included in this test app.
+
 ### Prerequisites
 
 1. OCI CLI configured (`oci setup config`)

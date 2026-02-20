@@ -47,6 +47,17 @@
             </dependencies>
             <build>
                 <finalName>test-function-aws-${project.version}</finalName>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-compiler-plugin</artifactId>
+                        <configuration>
+                            <excludes>
+                                <exclude>**/oci/**/*.java</exclude>
+                            </excludes>
+                        </configuration>
+                    </plugin>
+                </plugins>
             </build>
         </profile>
         
@@ -60,20 +71,31 @@
                 </property>
             </activation>
             <dependencies>
-                <!-- OCI Functions FDK -->
+                <!-- OCI Functions FDK (api + runtime; httpgateway is in api, no separate artifact on Maven Central) -->
                 <dependency>
                     <groupId>com.fnproject.fn</groupId>
                     <artifactId>api</artifactId>
-                    <version>1.0.133</version>
+                    <version>1.0.209</version>
                 </dependency>
                 <dependency>
                     <groupId>com.fnproject.fn</groupId>
-                    <artifactId>httpgateway</artifactId>
-                    <version>1.0.133</version>
+                    <artifactId>runtime</artifactId>
+                    <version>1.0.209</version>
                 </dependency>
             </dependencies>
             <build>
                 <finalName>test-function-oci-${project.version}</finalName>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-compiler-plugin</artifactId>
+                        <configuration>
+                            <excludes>
+                                <exclude>**/aws/**/*.java</exclude>
+                            </excludes>
+                        </configuration>
+                    </plugin>
+                </plugins>
             </build>
         </profile>
         
@@ -99,12 +121,12 @@
                 <dependency>
                     <groupId>com.fnproject.fn</groupId>
                     <artifactId>api</artifactId>
-                    <version>1.0.133</version>
+                    <version>1.0.209</version>
                 </dependency>
                 <dependency>
                     <groupId>com.fnproject.fn</groupId>
-                    <artifactId>httpgateway</artifactId>
-                    <version>1.0.133</version>
+                    <artifactId>runtime</artifactId>
+                    <version>1.0.209</version>
                 </dependency>
             </dependencies>
         </profile>

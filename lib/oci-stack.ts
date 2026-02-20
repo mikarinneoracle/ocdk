@@ -1,7 +1,7 @@
 import { Construct } from 'constructs';
 import { App, TerraformStack } from 'cdktf';
-import { OciProvider } from '@cdktf/provider-oci/lib/provider';
-import { ArtifactsContainerRepository } from '@cdktf/provider-oci/lib/artifacts-container-repository';
+import { OciProvider } from '../.gen/providers/oci/provider';
+import { ArtifactsContainerRepository } from '../.gen/providers/oci/artifacts-container-repository';
 import { OciBackendConfig } from '../config/oci-config';
 
 export interface OciStackConfig {

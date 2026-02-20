@@ -3,12 +3,16 @@
   "version": "1.0.0",
   "description": "OCI CDK stack for OCI Functions, API Gateway, and related infrastructure",
   "main": "lib/index.js",
+  "bin": {
+    "ocdk": "./bin/ocdk.js"
+  },
   "scripts": {
     "build": "tsc",
     "compile": "tsc",
     "watch": "tsc -w",
     "test": "jest",
-    "ocdk": "cdktf",
+    "ocdk": "node bin/ocdk.js",
+    "cdktf": "cdktf",
     "deploy": "cdktf deploy",
     "diff": "cdktf diff",
     "destroy": "cdktf destroy",
@@ -25,12 +29,12 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "cdktf": "^0.20.0",
+    "cdktf": "^0.21.0",
     "constructs": "^10.0.0"
   },
   "devDependencies": {
-    "@cdktf/provider-oci": "^9.0.0",
     "@types/node": "^18.0.0",
+    "cdktf-cli": "^0.21.0",
     "typescript": "^5.0.0"
   }
 }

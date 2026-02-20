@@ -2,6 +2,6 @@ schema_version: 20180708
 name: test-java-function
 version: 0.0.1
 runtime: java
-build_image: fnproject/fn-java-fdk:jdk11-latest
-run_image: fnproject/fn-java-fdk:jdk11-latest
+build_image: fnproject/fn-java-fdk-build:jdk11-1.0.207
+run_image: fnproject/fn-java-fdk:jre11-1.0.207
 cmd: com.example.function.oci.OciFunctionHandler::handleRequest

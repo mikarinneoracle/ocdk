@@ -15,7 +15,8 @@
     "destroy": "cdktf destroy",
     "get": "cdktf get",
     "synth": "cdktf synth",
-    "list": "cdktf list"
+    "list": "cdktf list",
+    "redeploy:function": "./scripts/redeploy-function.sh"
   },
   "keywords": [
     "oci",

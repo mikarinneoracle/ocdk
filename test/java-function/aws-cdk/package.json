@@ -7,7 +7,8 @@
     "build": "tsc",
     "watch": "tsc -w",
     "cdk": "cdk",
-    "deploy": "cdk deploy",
+    "build:jar": "../scripts/build-function.sh aws",
+    "deploy": "npm run build:jar && cdk deploy",
     "diff": "cdk diff",
     "synth": "cdk synth",
     "destroy": "cdk destroy"

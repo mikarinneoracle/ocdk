@@ -17,10 +17,38 @@
         <maven.compiler.source>11</maven.compiler.source>
         <maven.compiler.target>11</maven.compiler.target>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <jackson.version>2.15.3</jackson.version>
+        <oci.sdk.version>3.50.2</oci.sdk.version>
     </properties>
 
     <dependencies>
-        <!-- Common dependencies (always included) -->
+        <!-- Align Jackson to avoid NoSuchMethodError (e.g. JsonTypeInfo.requireTypeIdForSubtypes) -->
+        <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-annotations</artifactId>
+            <version>${jackson.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-core</artifactId>
+            <version>${jackson.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-databind</artifactId>
+            <version>${jackson.version}</version>
+        </dependency>
+        <!-- Common: PostgreSQL driver and connection pool -->
+        <dependency>
+            <groupId>org.postgresql</groupId>
+            <artifactId>postgresql</artifactId>
+            <version>42.6.0</version>
+        </dependency>
+        <dependency>
+            <groupId>com.zaxxer</groupId>
+            <artifactId>HikariCP</artifactId>
+            <version>5.0.1</version>
+        </dependency>
     </dependencies>
     
     <profiles>
@@ -43,6 +71,11 @@
                     <groupId>com.amazonaws</groupId>
                     <artifactId>aws-lambda-java-events</artifactId>
                     <version>3.11.0</version>
+                </dependency>
+                <dependency>
+                    <groupId>software.amazon.awssdk</groupId>
+                    <artifactId>secretsmanager</artifactId>
+                    <version>2.20.0</version>
                 </dependency>
             </dependencies>
             <build>
@@ -81,6 +114,21 @@
                     <groupId>com.fnproject.fn</groupId>
                     <artifactId>runtime</artifactId>
                     <version>1.0.209</version>
+                </dependency>
+                <dependency>
+                    <groupId>com.oracle.oci.sdk</groupId>
+                    <artifactId>oci-java-sdk-secrets</artifactId>
+                    <version>${oci.sdk.version}</version>
+                </dependency>
+                <dependency>
+                    <groupId>com.oracle.oci.sdk</groupId>
+                    <artifactId>oci-java-sdk-common</artifactId>
+                    <version>${oci.sdk.version}</version>
+                </dependency>
+                <dependency>
+                    <groupId>com.oracle.oci.sdk</groupId>
+                    <artifactId>oci-java-sdk-common-httpclient-jersey</artifactId>
+                    <version>${oci.sdk.version}</version>
                 </dependency>
             </dependencies>
             <build>
@@ -128,6 +176,26 @@
                     <artifactId>runtime</artifactId>
                     <version>1.0.209</version>
                 </dependency>
+                <dependency>
+                    <groupId>software.amazon.awssdk</groupId>
+                    <artifactId>secretsmanager</artifactId>
+                    <version>2.20.0</version>
+                </dependency>
+                <dependency>
+                    <groupId>com.oracle.oci.sdk</groupId>
+                    <artifactId>oci-java-sdk-secrets</artifactId>
+                    <version>${oci.sdk.version}</version>
+                </dependency>
+                <dependency>
+                    <groupId>com.oracle.oci.sdk</groupId>
+                    <artifactId>oci-java-sdk-common</artifactId>
+                    <version>${oci.sdk.version}</version>
+                </dependency>
+                <dependency>
+                    <groupId>com.oracle.oci.sdk</groupId>
+                    <artifactId>oci-java-sdk-common-httpclient-jersey</artifactId>
+                    <version>${oci.sdk.version}</version>
+                </dependency>
             </dependencies>
         </profile>
     </profiles>
@@ -156,6 +224,16 @@
                         </goals>
                         <configuration>
                             <createDependencyReducedPom>false</createDependencyReducedPom>
+                            <filters>
+                                <filter>
+                                    <artifact>*:*</artifact>
+                                    <excludes>
+                                        <exclude>META-INF/*.SF</exclude>
+                                        <exclude>META-INF/*.DSA</exclude>
+                                        <exclude>META-INF/*.RSA</exclude>
+                                    </excludes>
+                                </filter>
+                            </filters>
                         </configuration>
                     </execution>
                 </executions>

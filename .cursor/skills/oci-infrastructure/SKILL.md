@@ -65,6 +65,40 @@ if ("signout".equals(action)) {
 
 ---
 
+## OCI Function lifecycle: `@FnConfiguration setUp`
+
+### Principle
+
+Use **`@FnConfiguration public void setUp(RuntimeContext ctx) throws Exception`** to run one-time setup when the OCI Function is loaded (e.g. create DB connection pools, load secrets). This runs before the first request and is the right place to initialize shared resources.
+
+### Implementation pattern
+
+```java
+@FnConfiguration
+public void setUp(RuntimeContext ctx) throws Exception {
+    // Read config (e.g. secret OCID) from function config or env
+    String secretOcid = ctx.getConfigurationByKey("PG_SECRET_OCID")
+        .orElse(System.getenv("PG_SECRET_OCID"));
+    // Initialize connection pool, caches, etc.
+    initPool();
+    if (getDataSource() != null) {
+        businessLogic.setSysdateDataSource(getDataSource());
+    }
+}
+```
+
+- **Config keys**: Use `ctx.getConfigurationByKey("KEY")` for values configured on the function (e.g. in OCI Console or IaC).
+- **Fallback**: Use `System.getenv("KEY")` when the same key is set via environment variables.
+- **When it runs**: Once per function instance before the first request; use for DB pools, Secrets client setup, and wiring shared resources into business logic.
+
+### When to apply
+
+- When creating a DB connection pool for OCI Functions
+- When fetching secrets (e.g. PG connection string) from OCI Vault and caching the result
+- When wiring a shared `DataSource` or client into platform-agnostic business logic
+
+---
+
 ## OCIR Compartment Best Practices
 
 ### Principle

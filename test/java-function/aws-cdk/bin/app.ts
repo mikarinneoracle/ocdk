@@ -11,6 +11,8 @@ new TestFunctionStack(app, 'TestFunctionStack', {
     region: process.env.CDK_DEFAULT_REGION || 'us-east-1',
   },
   description: 'Test stack for Java Lambda function',
+  pgSecretArn: process.env.PG_SECRET_ARN,
+  rdsHost: process.env.RDS_HOST,
 });
 
 app.synth();

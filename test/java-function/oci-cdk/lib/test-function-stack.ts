@@ -25,6 +25,8 @@ export interface OciStackConfig {
   functionAppName: string;
   functionName: string;
   ocirRepositoryName?: string;
+  /** OCI Vault secret OCID for PostgreSQL connection string (function config key: PG_SECRET_OCID). */
+  pgSecretOcid?: string;
   backend?: OciBackendConfig;
 }
 
@@ -430,6 +432,7 @@ fi`;
       image: imageUrl,
       memoryInMbs: '256',
       timeoutInSeconds: 30,
+      config: config.pgSecretOcid ? { PG_SECRET_OCID: config.pgSecretOcid } : undefined,
     });
     // Add dependency on null_resource using addOverride
     // This ensures the image is built and pushed before the Function is created
@@ -441,7 +444,7 @@ fi`;
     const apiDeployment = new ApigatewayDeployment(this, 'ApiDeployment', {
       compartmentId: config.compartmentId,
       gatewayId: apiGateway.id,
-      pathPrefix: '',
+      pathPrefix: '/',
       displayName: `${id}-deployment`,
       specification: {
         routes: [

@@ -9,6 +9,7 @@
  *
  * Optional / defaults:
  * - OCI_COMPARTMENT_ID, OCI_TENANCY_ID, OCI_REGION, OCI_OCIR_REPOSITORY_NAME
+ * - PG_SECRET_OCID – OCI Vault secret OCID for PostgreSQL connection string (injected as function config PG_SECRET_OCID)
  *
  * The Functions resource requires the container image to already exist in OCIR
  * (e.g. build and push with scripts/build-docker.sh and scripts/deploy-oci-function.sh).
@@ -33,6 +34,8 @@ export interface OciConfig {
   functionAppName: string;
   functionName: string;
   ocirRepositoryName?: string;
+  /** OCI Vault secret OCID for PG connection string (set PG_SECRET_OCID env var). */
+  pgSecretOcid?: string;
   backend?: OciBackendConfig;
 }
 
@@ -86,5 +89,6 @@ export const ociConfig: OciConfig = {
   functionAppName: 'test-function-app',
   functionName: 'test-java-function',
   ocirRepositoryName: process.env.OCI_OCIR_REPOSITORY_NAME || 'test-java-function',
+  pgSecretOcid: process.env.PG_SECRET_OCID || 'ocid1.vaultsecret.oc1.eu-frankfurt-1.amaaaaaauevftmqarqp5s4l5hm3lbvwuiiidv4x3wejp62p2lshnono25nwq',
   backend: backendConfig,
 };

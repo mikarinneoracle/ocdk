@@ -27,6 +27,8 @@ public class OciFunctionHandler extends BaseFunctionHandler {
     private final FunctionBusinessLogic businessLogic;
     /** Vault Secret OCID for PG connection string (must be ocid1.secret..., not a Key OCID). */
     private volatile String pgSecretOcid;
+    /** PG connection string from config (when PG_URL is set and no Vault secret is used). */
+    private volatile String pgConnectionString;
 
     public OciFunctionHandler() {
         this.businessLogic = new FunctionBusinessLogic();
@@ -34,7 +36,10 @@ public class OciFunctionHandler extends BaseFunctionHandler {
 
     @FnConfiguration
     public void setUp(RuntimeContext ctx) throws Exception {
-        // Secret OCID from function config or env (e.g. PG_SECRET_OCID)
+        // PG_URL from function config or env (used when OCI_VAULT_ID is not set)
+        pgConnectionString = ctx.getConfigurationByKey("PG_URL")
+            .orElse(System.getenv("PG_URL"));
+        // Secret OCID from function config or env (used when stack creates Vault secret from PG_URL)
         pgSecretOcid = ctx.getConfigurationByKey("PG_SECRET_OCID")
             .orElse(System.getenv("PG_SECRET_OCID"));
         initPool();
@@ -50,15 +55,14 @@ public class OciFunctionHandler extends BaseFunctionHandler {
 
     @Override
     protected String getConnectionString() throws Exception {
+        // Prefer direct PG_URL from config (when OCI_VAULT_ID was not set)
+        if (pgConnectionString != null && !pgConnectionString.isBlank()) {
+            return pgConnectionString;
+        }
         if (pgSecretOcid == null || pgSecretOcid.isBlank()) {
             return null;
         }
-        // GetSecretBundle requires a Secret OCID (ocid1.secret...), not a Key OCID (ocid1.key...)
-        if (pgSecretOcid.contains("ocid1.key.")) {
-            throw new IllegalArgumentException(
-                "PG_SECRET_OCID must be a Vault Secret OCID (ocid1.secret.oc1....), not a Key OCID. " +
-                "Create a Secret in Vault with the connection string and use its OCID.");
-        }
+        
         ResourcePrincipalAuthenticationDetailsProvider provider =
             ResourcePrincipalAuthenticationDetailsProvider.builder().build();
         try (SecretsClient client = SecretsClient.builder().build(provider)) {

@@ -13,6 +13,7 @@ import { ApigatewayGateway } from '../.gen/providers/oci/apigateway-gateway';
 import { ApigatewayDeployment } from '../.gen/providers/oci/apigateway-deployment';
 import { FunctionsApplication } from '../.gen/providers/oci/functions-application';
 import { FunctionsFunction } from '../.gen/providers/oci/functions-function';
+import { VaultSecret } from '../.gen/providers/oci/vault-secret';
 import { OciBackendConfig } from '../config/oci-config';
 import * as path from 'path';
 
@@ -25,7 +26,13 @@ export interface OciStackConfig {
   functionAppName: string;
   functionName: string;
   ocirRepositoryName?: string;
-  /** OCI Vault secret OCID for PostgreSQL connection string (function config key: PG_SECRET_OCID). */
+  /** When set with vaultOcid and keyOcid, stack creates Vault secret "test-pg-url" and function uses it. */
+  pgUrl?: string;
+  /** Vault OCID (required with keyOcid when pgUrl is set and using Vault). */
+  vaultOcid?: string;
+  /** KMS Key OCID (required when vaultOcid is set). */
+  keyOcid?: string;
+  /** When pgUrl is not set: existing OCI Vault secret OCID for PG (function config key: PG_SECRET_OCID). */
   pgSecretOcid?: string;
   backend?: OciBackendConfig;
 }
@@ -407,6 +414,44 @@ fi`;
     publicSubnet.addOverride('route_table_id', publicRouteTable.id);
 
     // -------------------------------------------------------------------------
+    // PG connection: either pass PG_URL as function config, or create Vault secret and pass PG_SECRET_OCID
+    // -------------------------------------------------------------------------
+    const functionConfig: Record<string, string> = {};
+    if (config.pgUrl && config.pgUrl.trim()) {
+      if (config.vaultOcid?.trim()) {
+        // Vault path: require keyOcid and create secret "test-pg-url"
+        if (!config.keyOcid?.trim()) {
+          throw new Error(
+            'When OCI_VAULT_OCID is set, OCI_KEY_OCID is required to create the test-pg-url secret. ' +
+            'Set OCI_KEY_OCID to your Vault encryption Key OCID.'
+          );
+        }
+        const pgUrlSecret = new VaultSecret(this, 'TestPgUrlSecret', {
+          compartmentId: config.compartmentId,
+          vaultId: config.vaultOcid,
+          keyId: config.keyOcid,
+          secretName: 'test-pg-url',
+          description: 'PostgreSQL connection URL for test function (from PG_URL)',
+          secretContent: {
+            contentType: 'BASE64',
+            content: Buffer.from(config.pgUrl.trim(), 'utf-8').toString('base64'),
+          },
+        });
+        functionConfig.PG_SECRET_OCID = pgUrlSecret.id;
+      } else {
+        // No Vault: pass PG_URL directly as function config (clear-text)
+        console.warn(
+          '[OCI Test Function] WARNING: PG_URL is being passed to the function as plain config (clear-text). ' +
+          'Credentials are visible in function configuration. For production, store the connection string in OCI Vault and set ' +
+          'OCI_VAULT_OCID and OCI_KEY_OCID so the stack creates secret "test-pg-url"; the function will then receive only PG_SECRET_OCID.'
+        );
+        functionConfig.PG_URL = config.pgUrl.trim();
+      }
+    } else if (config.pgSecretOcid?.trim()) {
+      functionConfig.PG_SECRET_OCID = config.pgSecretOcid.trim();
+    }
+
+    // -------------------------------------------------------------------------
     // API Gateway (public subnet)
     // -------------------------------------------------------------------------
     const apiGateway = new ApigatewayGateway(this, 'ApiGateway', {
@@ -432,7 +477,7 @@ fi`;
       image: imageUrl,
       memoryInMbs: '256',
       timeoutInSeconds: 30,
-      config: config.pgSecretOcid ? { PG_SECRET_OCID: config.pgSecretOcid } : undefined,
+      config: Object.keys(functionConfig).length > 0 ? functionConfig : undefined,
     });
     // Add dependency on null_resource using addOverride
     // This ensures the image is built and pushed before the Function is created

@@ -77,14 +77,16 @@ public class AwsFunctionHandler extends BaseFunctionHandler implements RequestHa
             GetSecretValueResponse resp = client.getSecretValue(
                 GetSecretValueRequest.builder().secretId(pgSecretArn).build());
             String raw = resp.secretString();
-            if (raw == null) return null;
+            if (raw == null || raw.isBlank()) return null;
+            raw = raw.trim();
+            // Same format as OCI: raw postgresql:// URL (from PG_URL) or RDS secret JSON
+            if (raw.startsWith("postgresql://")) {
+                return raw;
+            }
             // RDS secret is JSON: username, password, host, port, dbname, engine, ...
             ObjectMapper mapper = new ObjectMapper();
             JsonNode o = mapper.readTree(raw);
             String host = o.has("host") ? o.get("host").asText() : null;
-            if (host == null || host.isBlank()) {
-                host = System.getenv("RDS_HOST");
-            }
             int port = o.has("port") ? o.get("port").asInt() : 5432;
             String username = o.has("username") ? o.get("username").asText() : null;
             String password = o.has("password") ? o.get("password").asText() : null;

@@ -15,6 +15,9 @@ new TestFunctionStack(app, stackName, {
   functionAppName: ociConfig.functionAppName,
   functionName: ociConfig.functionName,
   ocirRepositoryName: ociConfig.ocirRepositoryName,
+  pgUrl: ociConfig.pgUrl,
+  vaultOcid: ociConfig.vaultOcid,
+  keyOcid: ociConfig.keyOcid,
   pgSecretOcid: ociConfig.pgSecretOcid,
   backend: ociConfig.backend,
 });

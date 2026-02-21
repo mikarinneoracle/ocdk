@@ -4,12 +4,15 @@
  * Required env vars:
  * - OCI_NAMESPACE – tenancy object storage namespace (oci os ns get). Required for OCIR image URL.
  *
- * Required (or use OCI_COMPARTMENT_ID for both):
- * - OCI_OCIR_COMPARTMENT_ID – compartment for the OCIR repository (cannot be root).
+ * Required (or use OCI_COMPARTMENT_OCID for both):
+ * - OCI_OCIR_COMPARTMENT_OCID – compartment OCID for the OCIR repository (cannot be root). (OCI_OCIR_COMPARTMENT_ID also accepted.)
  *
  * Optional / defaults:
- * - OCI_COMPARTMENT_ID, OCI_TENANCY_ID, OCI_REGION, OCI_OCIR_REPOSITORY_NAME
- * - PG_SECRET_OCID – OCI Vault secret OCID for PostgreSQL connection string (injected as function config PG_SECRET_OCID)
+ * - OCI_COMPARTMENT_OCID, OCI_TENANCY_OCID, OCI_REGION, OCI_OCIR_REPOSITORY_NAME (OCI_*_ID env vars also accepted for compartment/tenancy.)
+ * - PG_URL – PostgreSQL connection string. If set: when OCI_VAULT_OCID is not set, passed to function as config (clear-text; a warning is emitted—prefer Vault for production). When OCI_VAULT_OCID is set, stack creates Vault secret "test-pg-url" (OCI_KEY_OCID required).
+ * - OCI_VAULT_OCID – when set with PG_URL, stack creates secret in this Vault (OCI_KEY_OCID required). Use this to avoid storing credentials in function config.
+ * - OCI_KEY_OCID – required when OCI_VAULT_OCID is set (KMS Key OCID for encrypting the secret).
+ * - PG_SECRET_OCID – alternative: existing OCI Vault secret OCID for PG (used when PG_URL is not set).
  *
  * The Functions resource requires the container image to already exist in OCIR
  * (e.g. build and push with scripts/build-docker.sh and scripts/deploy-oci-function.sh).
@@ -34,7 +37,13 @@ export interface OciConfig {
   functionAppName: string;
   functionName: string;
   ocirRepositoryName?: string;
-  /** OCI Vault secret OCID for PG connection string (set PG_SECRET_OCID env var). */
+  /** When set, stack creates Vault secret "test-pg-url" from this value (requires vaultOcid and keyOcid when using Vault). */
+  pgUrl?: string;
+  /** Vault OCID for creating test-pg-url secret (required when pgUrl is set and using Vault). */
+  vaultOcid?: string;
+  /** KMS Key OCID for encrypting test-pg-url secret (required when vaultOcid is set). */
+  keyOcid?: string;
+  /** When pgUrl is not set: use this existing OCI Vault secret OCID for PG (set PG_SECRET_OCID env var). */
   pgSecretOcid?: string;
   backend?: OciBackendConfig;
 }
@@ -57,17 +66,17 @@ const backendConfig: OciBackendConfig | undefined = backendType === 'local'
         unlockAddress: process.env.OCI_STATE_HTTP_UNLOCK_ADDRESS,
       };
 
-const ocirCompartmentId = process.env.OCI_OCIR_COMPARTMENT_ID || process.env.OCI_COMPARTMENT_ID;
+const ocirCompartmentOcid = process.env.OCI_OCIR_COMPARTMENT_OCID || process.env.OCI_OCIR_COMPARTMENT_ID || process.env.OCI_COMPARTMENT_OCID || process.env.OCI_COMPARTMENT_ID;
 
-if (!ocirCompartmentId) {
+if (!ocirCompartmentOcid) {
   throw new Error(
-    'OCI_OCIR_COMPARTMENT_ID is required (or set OCI_COMPARTMENT_ID to use the same compartment for everything). ' +
+    'OCI_OCIR_COMPARTMENT_OCID is required (or set OCI_COMPARTMENT_OCID to use the same compartment for everything). ' +
     'OCIR repositories cannot be created in the root compartment.'
   );
 }
-if (ocirCompartmentId.includes('root')) {
+if (ocirCompartmentOcid.includes('root')) {
   throw new Error(
-    'OCI_OCIR_COMPARTMENT_ID cannot be the root compartment. ' +
+    'OCI_OCIR_COMPARTMENT_OCID cannot be the root compartment. ' +
     'Set it to a non-root compartment OCID (e.g. your home compartment).'
   );
 }
@@ -81,14 +90,17 @@ if (!namespace || namespace === 'your-namespace') {
 }
 
 export const ociConfig: OciConfig = {
-  compartmentId: process.env.OCI_COMPARTMENT_ID || 'ocid1.compartment.oc1..aaaaaaa...',
-  ocirCompartmentId: ocirCompartmentId || undefined,
-  tenancyId: process.env.OCI_TENANCY_ID || 'ocid1.tenancy.oc1..aaaaaaa...',
+  compartmentId: process.env.OCI_COMPARTMENT_OCID || process.env.OCI_COMPARTMENT_ID || 'ocid1.compartment.oc1..aaaaaaa...',
+  ocirCompartmentId: ocirCompartmentOcid || undefined,
+  tenancyId: process.env.OCI_TENANCY_OCID || process.env.OCI_TENANCY_ID || 'ocid1.tenancy.oc1..aaaaaaa...',
   region: process.env.OCI_REGION || 'eu-frankfurt-1',
   namespace,
   functionAppName: 'test-function-app',
   functionName: 'test-java-function',
   ocirRepositoryName: process.env.OCI_OCIR_REPOSITORY_NAME || 'test-java-function',
-  pgSecretOcid: process.env.PG_SECRET_OCID || 'ocid1.vaultsecret.oc1.eu-frankfurt-1.amaaaaaauevftmqarqp5s4l5hm3lbvwuiiidv4x3wejp62p2lshnono25nwq',
+  pgUrl: process.env.PG_URL,
+  vaultOcid: process.env.OCI_VAULT_OCID,
+  keyOcid: process.env.OCI_KEY_OCID,
+  pgSecretOcid: process.env.PG_SECRET_OCID,
   backend: backendConfig,
 };

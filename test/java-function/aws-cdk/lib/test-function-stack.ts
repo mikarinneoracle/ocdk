@@ -3,33 +3,49 @@ import { Construct } from 'constructs';
 import * as lambda from 'aws-cdk-lib/aws-lambda';
 import * as apigateway from 'aws-cdk-lib/aws-apigateway';
 import * as secretsmanager from 'aws-cdk-lib/aws-secretsmanager';
+import * as ec2 from 'aws-cdk-lib/aws-ec2';
+import * as rds from 'aws-cdk-lib/aws-rds';
 import * as path from 'path';
 
 export interface TestFunctionStackProps extends cdk.StackProps {
-  /** ARN of the Secrets Manager secret for PostgreSQL (e.g. RDS secret). Set PG_SECRET_ARN env var at deploy time to pass it. */
+  /** PostgreSQL connection URL (same format as OCI: postgresql://user:password@host:port/dbname). When set, stack creates a Secrets Manager secret and passes its ARN to Lambda. Set PG_URL at deploy time. */
+  readonly pgUrl?: string;
+  /** When PG_URL is not set: ARN of existing Secrets Manager secret (e.g. RDS-generated JSON secret). Set PG_SECRET_ARN at deploy time. RDS is not created by this stack — create RDS manually in the stack VPC and allow the Lambda security group on port 5432. */
   readonly pgSecretArn?: string;
-  /** RDS host (optional). Use when the secret has no host or to override. Set RDS_HOST env var at deploy time. */
-  readonly rdsHost?: string;
 }
 
 export class TestFunctionStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props?: TestFunctionStackProps) {
     super(scope, id, props);
 
-    const pgSecretArn = props?.pgSecretArn ?? process.env.PG_SECRET_ARN;
-    const rdsHost = props?.rdsHost ?? process.env.RDS_HOST;
+    const pgUrl = props?.pgUrl ?? process.env.PG_URL;
+    const pgSecretArnFromEnv = props?.pgSecretArn ?? process.env.PG_SECRET_ARN;
     const environment: Record<string, string> = {
       PLATFORM: 'AWS',
     };
-    if (pgSecretArn) {
+
+    // PG connection: create secret from PG_URL (like OCI) or use existing PG_SECRET_ARN
+    let pgSecretArn: string | undefined;
+    if (pgUrl?.trim()) {
+      const pgSecret = new secretsmanager.Secret(this, 'PgUrlSecret', {
+        secretName: `test-function-pg-url-${this.stackName}`,
+        description: 'PostgreSQL connection URL for test function (from PG_URL)',
+        secretStringValue: cdk.SecretValue.unsafePlainText(pgUrl.trim()),
+      });
+      pgSecretArn = pgSecret.secretArn;
+      environment.PG_SECRET_ARN = pgSecretArn;
+    } else if (pgSecretArnFromEnv?.trim()) {
+      pgSecretArn = pgSecretArnFromEnv.trim();
       environment.PG_SECRET_ARN = pgSecretArn;
     }
-    if (rdsHost) {
-      environment.RDS_HOST = rdsHost;
-    }
 
-    // Java Lambda function
-    // Uses AwsFunctionHandler for platform-specific implementation
+    // VPC created by default (like OCI stack VCN) — create RDS manually in this VPC and allow Lambda security group on port 5432
+    const vpc = new ec2.Vpc(this, 'Vpc', {
+      maxAzs: 2,
+      natGateways: 1,
+    });
+
+    // Java Lambda function (in VPC private subnets so it can reach RDS and AWS APIs via NAT)
     const javaFunction = new lambda.Function(this, 'TestJavaFunction', {
       runtime: lambda.Runtime.JAVA_11,
       handler: 'com.example.function.aws.AwsFunctionHandler',
@@ -40,6 +56,29 @@ export class TestFunctionStack extends cdk.Stack {
       timeout: cdk.Duration.seconds(30),
       description: 'Test Java function compatible with AWS Lambda and OCI Functions',
       environment,
+      vpc,
+      vpcSubnets: { subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS },
+    });
+
+    const lambdaSg = javaFunction.connections.securityGroups[0] as ec2.SecurityGroup;
+
+    // Dedicated security group for RDS: allow PostgreSQL from Lambda (avoids circular dependency from self-referential rule)
+    const rdsSg = new ec2.SecurityGroup(this, 'RdsSecurityGroup', {
+      vpc,
+      description: 'Security group for RDS - allow Lambda on port 5432',
+      allowAllOutbound: true,
+    });
+    rdsSg.addIngressRule(
+      ec2.Peer.securityGroupId(lambdaSg.securityGroupId),
+      ec2.Port.tcp(5432),
+      'Allow PostgreSQL from Lambda',
+    );
+
+    // DB subnet group for manual RDS: use this when creating RDS in the console/CLI
+    const dbSubnetGroup = new rds.SubnetGroup(this, 'DbSubnetGroup', {
+      description: 'Private subnets for RDS (use when creating RDS in this VPC)',
+      vpc,
+      vpcSubnets: { subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS },
     });
 
     if (pgSecretArn) {
@@ -85,6 +124,30 @@ export class TestFunctionStack extends cdk.Stack {
       value: javaFunction.functionArn,
       description: 'Lambda function ARN',
       exportName: 'TestFunctionArn',
+    });
+
+    new cdk.CfnOutput(this, 'VpcId', {
+      value: vpc.vpcId,
+      description: 'VPC ID — create RDS in this VPC',
+      exportName: 'TestFunctionVpcId',
+    });
+
+    new cdk.CfnOutput(this, 'LambdaSecurityGroupId', {
+      value: lambdaSg.securityGroupId,
+      description: 'Lambda security group ID',
+      exportName: 'TestFunctionLambdaSecurityGroupId',
+    });
+
+    new cdk.CfnOutput(this, 'RdsSecurityGroupId', {
+      value: rdsSg.securityGroupId,
+      description: 'Assign this security group to RDS - stack allows inbound 5432 from Lambda',
+      exportName: 'TestFunctionRdsSecurityGroupId',
+    });
+
+    new cdk.CfnOutput(this, 'DbSubnetGroupName', {
+      value: dbSubnetGroup.subnetGroupName,
+      description: 'Select this DB subnet group when creating RDS in this VPC',
+      exportName: 'TestFunctionDbSubnetGroupName',
     });
   }
 }

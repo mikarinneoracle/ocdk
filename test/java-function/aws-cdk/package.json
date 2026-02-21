@@ -11,6 +11,7 @@
     "deploy": "npm run build:jar && cdk deploy",
     "diff": "cdk diff",
     "synth": "cdk synth",
+    "redeploy:function": "./scripts/redeploy-function.sh",
     "destroy": "cdk destroy"
   },
   "keywords": [

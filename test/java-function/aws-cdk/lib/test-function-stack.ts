@@ -5,7 +5,6 @@ import * as apigateway from 'aws-cdk-lib/aws-apigateway';
 import * as secretsmanager from 'aws-cdk-lib/aws-secretsmanager';
 import * as ec2 from 'aws-cdk-lib/aws-ec2';
 import * as rds from 'aws-cdk-lib/aws-rds';
-import * as fs from 'fs';
 import * as path from 'path';
 
 export interface TestFunctionStackProps extends cdk.StackProps {
@@ -46,21 +45,13 @@ export class TestFunctionStack extends cdk.Stack {
       natGateways: 1,
     });
 
-    // Lambda code: use built JAR when present; otherwise placeholder so cdk destroy / synth succeeds without building
-    const jarPath = path.join(__dirname, '../../function-code/target/test-function-aws-1.0.0.jar');
-    const placeholderPath = path.join(__dirname, '../placeholder-lambda.zip');
-    const lambdaAssetPath = fs.existsSync(jarPath) ? jarPath : placeholderPath;
-    if (!fs.existsSync(lambdaAssetPath)) {
-      throw new Error(
-        `Lambda asset not found: ${jarPath}. Build the JAR (e.g. ./scripts/build-function.sh) or add ${placeholderPath} for cdk destroy.`
-      );
-    }
-
-    // Java Lambda function (in VPC private subnets so it can reach RDS and AWS APIs via NAT)
+    // Java Lambda function (in VPC private subnets so it can reach RDS and AWS APIs via NAT). Build JAR first (e.g. ./scripts/build-function.sh aws).
     const javaFunction = new lambda.Function(this, 'TestJavaFunction', {
       runtime: lambda.Runtime.JAVA_11,
       handler: 'com.example.function.aws.AwsFunctionHandler',
-      code: lambda.Code.fromAsset(lambdaAssetPath),
+      code: lambda.Code.fromAsset(
+        path.join(__dirname, '../../function-code/target/test-function-aws-1.0.0.jar')
+      ),
       memorySize: 512,
       timeout: cdk.Duration.seconds(30),
       description: 'Test Java function compatible with AWS Lambda and OCI Functions',

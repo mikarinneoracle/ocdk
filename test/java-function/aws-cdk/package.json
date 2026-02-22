@@ -8,7 +8,7 @@
     "watch": "tsc -w",
     "cdk": "cdk",
     "build:jar": "../scripts/build-function.sh aws",
-    "deploy": "npm run build:jar && cdk deploy",
+    "deploy": "cdk deploy",
     "diff": "cdk diff",
     "synth": "cdk synth",
     "redeploy:function": "./scripts/redeploy-function.sh",

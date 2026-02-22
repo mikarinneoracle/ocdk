@@ -54,8 +54,10 @@ public abstract class BaseFunctionHandler {
                 config.setPassword(password);
             }
             config.setJdbcUrl("jdbc:" + "postgresql://" + hostPortDb);
+            logConnectionSettingsForDebug("postgresql://***:***@" + hostPortDb, hostPortDb);
         } else {
             config.setJdbcUrl("jdbc:" + normalized);
+            logConnectionSettingsForDebug(normalized, null);
         }
         dataSource = new HikariDataSource(config);
     }
@@ -65,6 +67,22 @@ public abstract class BaseFunctionHandler {
             return URLDecoder.decode(s, StandardCharsets.UTF_8);
         } catch (Exception e) {
             return s;
+        }
+    }
+
+    /** Log connection settings (redacted) for debugging connection failures. */
+    private static void logConnectionSettingsForDebug(String redactedUrl, String hostPortDb) {
+        System.err.println("[DEBUG] PG connection attempt: " + redactedUrl);
+        if (hostPortDb != null && !hostPortDb.isEmpty()) {
+            int slash = hostPortDb.indexOf('/');
+            String hostPort = slash > 0 ? hostPortDb.substring(0, slash) : hostPortDb;
+            String dbRaw = slash > 0 && slash + 1 < hostPortDb.length() ? hostPortDb.substring(slash + 1) : "";
+            int q = dbRaw.indexOf('?');
+            String db = q >= 0 ? dbRaw.substring(0, q) : dbRaw;
+            int colon = hostPort.indexOf(':');
+            String host = colon > 0 ? hostPort.substring(0, colon) : hostPort;
+            String port = colon > 0 && colon + 1 < hostPort.length() ? hostPort.substring(colon + 1) : "5432";
+            System.err.println("[DEBUG] PG host=" + host + " port=" + port + " db=" + (db.isEmpty() ? "(default)" : db));
         }
     }
 

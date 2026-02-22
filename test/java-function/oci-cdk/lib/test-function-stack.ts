@@ -15,6 +15,7 @@ import { FunctionsApplication } from '../.gen/providers/oci/functions-applicatio
 import { FunctionsFunction } from '../.gen/providers/oci/functions-function';
 import { VaultSecret } from '../.gen/providers/oci/vault-secret';
 import { OciBackendConfig } from '../config/oci-config';
+import * as crypto from 'crypto';
 import * as path from 'path';
 
 export interface OciStackConfig {
@@ -349,6 +350,37 @@ fi`;
     publicSubnet.addOverride('security_list_ids', [publicSecurityList.id]);
 
     // -------------------------------------------------------------------------
+    // Security List for Private Subnet (Function + PG in same subnet)
+    // -------------------------------------------------------------------------
+    const privateSubnetCidr = '10.0.2.0/24';
+    const privateSecurityList = new CoreSecurityList(this, 'PrivateSecurityList', {
+      compartmentId: config.compartmentId,
+      vcnId: vcn.id,
+      displayName: `${id}-private-sl`,
+      ingressSecurityRules: [
+        {
+          protocol: '6', // TCP
+          source: privateSubnetCidr,
+          description: 'TCP traffic for ports: 5432 (PostgreSQL from private subnet)',
+          tcpOptions: {
+            min: 5432,
+            max: 5432,
+          },
+        },
+      ],
+      egressSecurityRules: [
+        {
+          protocol: 'all',
+          destination: '0.0.0.0/0',
+          description: 'Allow all outbound traffic',
+        },
+      ],
+    });
+
+    // Associate security list with private subnet
+    privateSubnet.addOverride('security_list_ids', [privateSecurityList.id]);
+
+    // -------------------------------------------------------------------------
     // Service Gateway (for OCIR access from private subnet)
     // -------------------------------------------------------------------------
     // Get Object Storage service ID (OCIR uses Object Storage)
@@ -426,11 +458,16 @@ fi`;
             'Set OCI_KEY_OCID to your Vault encryption Key OCID.'
           );
         }
+        // Append random suffix to avoid "name already exists" when a secret with the same base name exists in the Vault.
+        // Set PG_SECRET_SUFFIX env var to pin the name across synths (e.g. PG_SECRET_SUFFIX=abc12345).
+        const pgUrlSecretSuffix =
+          process.env.PG_SECRET_SUFFIX || crypto.randomBytes(4).toString('hex');
+        const pgUrlSecretName = `${id}-pg-url-${pgUrlSecretSuffix}`;
         const pgUrlSecret = new VaultSecret(this, 'TestPgUrlSecret', {
           compartmentId: config.compartmentId,
           vaultId: config.vaultOcid,
           keyId: config.keyOcid,
-          secretName: 'test-pg-url',
+          secretName: pgUrlSecretName,
           description: 'PostgreSQL connection URL for test function (from PG_URL)',
           secretContent: {
             contentType: 'BASE64',
@@ -443,7 +480,7 @@ fi`;
         console.warn(
           '[OCI Test Function] WARNING: PG_URL is being passed to the function as plain config (clear-text). ' +
           'Credentials are visible in function configuration. For production, store the connection string in OCI Vault and set ' +
-          'OCI_VAULT_OCID and OCI_KEY_OCID so the stack creates secret "test-pg-url"; the function will then receive only PG_SECRET_OCID.'
+          'OCI_VAULT_OCID and OCI_KEY_OCID so the stack creates a Vault secret; the function will then receive only PG_SECRET_OCID.'
         );
         functionConfig.PG_URL = config.pgUrl.trim();
       }

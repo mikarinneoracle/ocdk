@@ -3,16 +3,8 @@
   "app": "npm run --silent compile && node lib/bin/app.js",
   "projectId": "test-function-oci",
   "terraformProviders": [
-    {
-      "name": "oci",
-      "source": "oracle/oci",
-      "version": "~> 5.0"
-    },
-    {
-      "name": "null",
-      "source": "hashicorp/null",
-      "version": "~> 3.0"
-    }
+    {"name": "oci", "source": "oracle/oci", "version": "~> 5.0"},
+    {"name": "null", "source": "hashicorp/null", "version": "~> 3.0"}
   ],
   "terraformModules": [],
   "context": {}

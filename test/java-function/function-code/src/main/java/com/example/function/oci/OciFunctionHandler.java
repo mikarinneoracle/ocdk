@@ -55,14 +55,15 @@ public class OciFunctionHandler extends BaseFunctionHandler {
 
     @Override
     protected String getConnectionString() throws Exception {
-        // Prefer direct PG_URL from config (when OCI_VAULT_ID was not set)
+        // Prefer direct PG_URL from config (when OCI_VAULT_OCID was not set)
         if (pgConnectionString != null && !pgConnectionString.isBlank()) {
+            System.err.println("[DEBUG] PG connection string (from config): " + pgConnectionString + " (remove this log in production)");
             return pgConnectionString;
         }
         if (pgSecretOcid == null || pgSecretOcid.isBlank()) {
             return null;
         }
-        
+
         ResourcePrincipalAuthenticationDetailsProvider provider =
             ResourcePrincipalAuthenticationDetailsProvider.builder().build();
         try (SecretsClient client = SecretsClient.builder().build(provider)) {
@@ -74,7 +75,9 @@ public class OciFunctionHandler extends BaseFunctionHandler {
             GetSecretBundleResponse resp = client.getSecretBundle(req);
             if (resp.getSecretBundle().getSecretBundleContent() instanceof Base64SecretBundleContentDetails) {
                 String base64 = ((Base64SecretBundleContentDetails) resp.getSecretBundle().getSecretBundleContent()).getContent();
-                return new String(Base64.getDecoder().decode(base64), StandardCharsets.UTF_8);
+                String decoded = new String(Base64.getDecoder().decode(base64), StandardCharsets.UTF_8);
+                System.err.println("[DEBUG] PG connection string (from Vault): " + decoded + " (remove this log in production)");
+                return decoded;
             }
             return null;
         } catch (BmcException e) {

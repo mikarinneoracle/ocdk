@@ -1,5 +1,5 @@
 {
-  "name": "oci-cdk",
+  "name": "@mikarinneoracle/oci-cdk",
   "version": "1.0.0",
   "description": "OCI CDK stack for OCI Functions, API Gateway, and related infrastructure",
   "main": "lib/index.js",
@@ -18,7 +18,8 @@
     "destroy": "cdktf destroy",
     "get": "cdktf get",
     "synth": "cdktf synth",
-    "list": "cdktf list"
+    "list": "cdktf list",
+    "prepublishOnly": "npm run build"
   },
   "keywords": [
     "oci",
@@ -28,6 +29,13 @@
   ],
   "author": "",
   "license": "ISC",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mikarinneoracle/ocdk.git"
+  },
+  "bugs": { "url": "https://github.com/mikarinneoracle/ocdk/issues" },
+  "homepage": "https://github.com/mikarinneoracle/ocdk#readme",
+  "files": ["bin", "lib", "README.md", "cdktf.json", "ocdk.json"],
   "dependencies": {
     "cdktf": "^0.21.0",
     "constructs": "^10.0.0"

@@ -14,6 +14,7 @@ new OciStack(app, stackName, {
   namespace: ociConfig.namespace,
   functionAppName: ociConfig.functionAppName,
   functionName: ociConfig.functionName,
+  functionJarPath: ociConfig.functionJarPath,
   ocirRepositoryName: ociConfig.ocirRepositoryName,
   backend: ociConfig.backend,
 });

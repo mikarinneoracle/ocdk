@@ -10,8 +10,12 @@ export interface OciStackConfig {
   tenancyId: string;
   region: string;
   namespace: string;
+  /** OCI Functions application name (e.g. my-app). Set via OCI_FUNCTION_APP_NAME or pass in config. */
   functionAppName: string;
+  /** OCI Function name (e.g. my-function). Set via OCI_FUNCTION_NAME or pass in config. */
   functionName: string;
+  /** Optional path to JAR (or Dockerfile context) to build and deploy as the function image. Set via OCI_FUNCTION_JAR_PATH. Empty = no function/image build. */
+  functionJarPath?: string;
   ocirRepositoryName?: string;
   backend?: OciBackendConfig;
 }
@@ -56,18 +60,9 @@ export class OciStack extends TerraformStack {
       tenancyOcid: config.tenancyId,
     });
 
-    // OCIR Container Repository
-    // Use home compartment (not root) - should be set via OCI_OCIR_COMPARTMENT_ID
+    // OCIR Container Repository (root compartment allowed if explicitly set)
     const ocirCompartmentId = config.ocirCompartmentId || config.compartmentId;
-    const ocirRepoName = config.ocirRepositoryName || config.functionName;
-    
-    // Validate that we're not using root compartment
-    if (ocirCompartmentId.includes('root')) {
-      throw new Error(
-        'OCIR repository cannot be created in root compartment. ' +
-        'Please set OCI_OCIR_COMPARTMENT_ID to your home compartment OCID.'
-      );
-    }
+    const ocirRepoName = config.ocirRepositoryName || config.functionName || 'oci-function';
 
     const ocirRepository = new ArtifactsContainerRepository(this, 'OcirRepository', {
       compartmentId: ocirCompartmentId,
@@ -76,13 +71,11 @@ export class OciStack extends TerraformStack {
       isImmutable: false, // Allow image updates
     });
 
-    // TODO: Add resources
-    // - Object Storage buckets
-    // - OCI Vault
-    // - Dynamic Groups & Policies
-    // - OCI Function Application
-    // - OCI Function (will reference OCIR repository)
-    // - API Gateway
-    // - API Gateway Deployment
+    // When config.functionJarPath is set, a future version can add:
+    // - VCN / subnet (if needed), Function Application, Function (image from build), API Gateway
+    // For now, functionName and functionJarPath are stored in config for use by callers or extensions.
+    if (config.functionJarPath && config.functionJarPath.trim()) {
+      // TODO: add null_resource build/push, FunctionsApplication, FunctionsFunction, API Gateway
+    }
   }
 }

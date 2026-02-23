@@ -1,0 +1,35 @@
+# When publishing, npm uses this instead of .gitignore so built lib/ is included.
+
+# Dependencies and build artifacts we don't ship
+node_modules/
+package-lock.json
+
+# Dev and test
+test/
+*.test.ts
+*.spec.ts
+jest.config.*
+.vscode/
+.idea/
+
+# Environment and local config
+.env
+.env.*
+!.env.example
+
+# Terraform / CDK local state
+.terraform/
+*.tfstate
+*.tfstate.*
+cdktf.out/
+.gen
+
+# IDE and OS
+.DS_Store
+*.log
+*.swp
+*.swo
+
+# Docs that are not needed in the package (optional; remove if you want them)
+# GETTING_STARTED.md
+# BACKEND_CONFIG.md

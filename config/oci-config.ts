@@ -7,6 +7,9 @@
  * - OCI_REGION
  * - OCI_NAMESPACE
  * - OCI_OCIR_COMPARTMENT_ID (for OCIR; must be non-root)
+ * - OCI_FUNCTION_APP_NAME (Functions application name; default empty)
+ * - OCI_FUNCTION_NAME (Function name; default empty)
+ * - OCI_FUNCTION_JAR_PATH (Path to JAR or Dockerfile context for function image; default empty)
  * - OCI_STATE_BUCKET (for remote state)
  * - OCI_STATE_BACKEND_TYPE (oci|http|local)
  */
@@ -29,6 +32,8 @@ export interface OciConfig {
   namespace: string;
   functionAppName: string;
   functionName: string;
+  /** Path to JAR or Dockerfile context for function image; empty = no build/deploy. */
+  functionJarPath?: string;
   ocirRepositoryName?: string;
   backend?: OciBackendConfig;
 }
@@ -65,8 +70,9 @@ export const ociConfig: OciConfig = {
   tenancyId: process.env.OCI_TENANCY_ID || 'ocid1.tenancy.oc1..aaaaaaa...',
   region: process.env.OCI_REGION || 'eu-frankfurt-1',
   namespace: process.env.OCI_NAMESPACE || 'your-namespace',
-  functionAppName: 'hello-arm',
-  functionName: 'testimonials-main',
-  ocirRepositoryName: process.env.OCI_OCIR_REPOSITORY_NAME || 'testimonials-main',
+  functionAppName: process.env.OCI_FUNCTION_APP_NAME ?? '',
+  functionName: process.env.OCI_FUNCTION_NAME ?? '',
+  functionJarPath: process.env.OCI_FUNCTION_JAR_PATH?.trim() || undefined,
+  ocirRepositoryName: process.env.OCI_OCIR_REPOSITORY_NAME || undefined,
   backend: backendConfig,
 };

@@ -227,6 +227,30 @@ See `scripts/deploy-function.sh` for automated function code deployment.
 - Terraform state can be stored locally or in OCI Object Storage (configure via environment variables)
 - Function code deployment can be automated via scripts using OCI CLI
 
+## Publishing to npm
+
+To publish this package to [npm](https://www.npmjs.com/):
+
+1. **Create an npm account** at https://www.npmjs.com/signup (if needed).
+2. **Log in** from the project root:
+   ```bash
+   npm login
+   ```
+3. **Optional: use a scoped name** if `oci-cdk` is taken — in `package.json` set `"name": "@your-username/oci-cdk"`.
+4. **Publish**:
+   ```bash
+   npm publish
+   ```
+   This runs `prepublishOnly` (builds the project) and publishes the contents listed in `files` (bin, lib, README.md, cdktf.json, ocdk.json).
+
+After publishing, users can install with:
+
+```bash
+npm install oci-cdk
+# or, if using a scope:
+npm install @your-username/oci-cdk
+```
+
 ## License
 
 ISC

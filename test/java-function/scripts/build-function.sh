@@ -24,8 +24,9 @@ elif [ "${PLATFORM}" == "oci" ]; then
     echo "Build complete!"
     echo "JAR location: ${FUNCTION_DIR}/target/test-function-oci-1.0.0.jar"
 else
-    echo "Building both platforms..."
-    mvn clean package -Pall
+    echo "Building both platforms (AWS then OCI; second run does not clean so both JARs remain)..."
+    mvn clean package -Paws -Dplatform=aws
+    mvn package -Poci -Dplatform=oci
     echo "Build complete!"
     echo "JAR locations:"
     echo "  AWS: ${FUNCTION_DIR}/target/test-function-aws-1.0.0.jar"

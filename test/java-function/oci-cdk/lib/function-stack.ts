@@ -27,7 +27,7 @@ export interface OciStackConfig {
   functionAppName: string;
   functionName: string;
   ocirRepositoryName?: string;
-  /** When set with vaultOcid and keyOcid, stack creates Vault secret "test-pg-url" and function uses it. */
+  /** When set with vaultOcid and keyOcid, stack creates Vault secret (pg-url) and function uses it. */
   pgUrl?: string;
   /** Vault OCID (required with keyOcid when pgUrl is set and using Vault). */
   vaultOcid?: string;
@@ -35,10 +35,16 @@ export interface OciStackConfig {
   keyOcid?: string;
   /** When pgUrl is not set: existing OCI Vault secret OCID for PG (function config key: PG_SECRET_OCID). */
   pgSecretOcid?: string;
+  /** API Gateway deployment path prefix. Default '/'. */
+  apiGwPathPrefix?: string;
+  /** API Gateway route path. Default '/{path*}'. */
+  apiGwRoutePath?: string;
+  /** API Gateway route methods. Default ['GET', 'POST', 'OPTIONS']. */
+  apiGwMethods?: string[];
   backend?: OciBackendConfig;
 }
 
-export class TestFunctionStack extends TerraformStack {
+export class FunctionStack extends TerraformStack {
   constructor(scope: Construct, id: string, config: OciStackConfig) {
     super(scope, id);
 
@@ -107,10 +113,10 @@ export class TestFunctionStack extends TerraformStack {
     // Default will be constructed in the script if not provided
     const ocirUsername = process.env.OCI_OCIR_USERNAME || 'AUTO_DETECT';
     
-    // function-code is at test/java-function/function-code (sibling of oci-cdk)
+    // function-code is at java-function/function-code (sibling of oci-cdk)
     // Resolve path relative to this file's location
-    // Compiled JS is at lib/lib/test-function-stack.js, so __dirname is lib/lib/
-    // From lib/lib/: ../ goes to lib/, ../ goes to oci-cdk/, ../ goes to test/java-function/, then function-code/
+    // Compiled JS is at lib/lib/function-stack.js, so __dirname is lib/lib/
+    // From lib/lib/: ../ goes to lib/, ../ goes to oci-cdk/, ../ goes to java-function/, then function-code/
     const functionCodePath = path.resolve(__dirname, '..', '..', '..', 'function-code');
     
     // Create null_resource using addOverride (since we can't generate types due to network issues)
@@ -289,7 +295,7 @@ fi`;
       compartmentId: config.compartmentId,
       displayName: `${id}-vcn`,
       cidrBlocks: ['10.0.0.0/16'],
-      dnsLabel: 'testfn',
+      dnsLabel: 'appfn',
     });
 
     const publicSubnet = new CoreSubnet(this, 'PublicSubnet', {
@@ -451,10 +457,10 @@ fi`;
     const functionConfig: Record<string, string> = {};
     if (config.pgUrl && config.pgUrl.trim()) {
       if (config.vaultOcid?.trim()) {
-        // Vault path: require keyOcid and create secret "test-pg-url"
+        // Vault path: require keyOcid and create pg-url secret
         if (!config.keyOcid?.trim()) {
           throw new Error(
-            'When OCI_VAULT_OCID is set, OCI_KEY_OCID is required to create the test-pg-url secret. ' +
+            'When OCI_VAULT_OCID is set, OCI_KEY_OCID is required to create the pg-url secret. ' +
             'Set OCI_KEY_OCID to your Vault encryption Key OCID.'
           );
         }
@@ -463,12 +469,12 @@ fi`;
         const pgUrlSecretSuffix =
           process.env.PG_SECRET_SUFFIX || crypto.randomBytes(4).toString('hex');
         const pgUrlSecretName = `${id}-pg-url-${pgUrlSecretSuffix}`;
-        const pgUrlSecret = new VaultSecret(this, 'TestPgUrlSecret', {
+        const pgUrlSecret = new VaultSecret(this, 'PgUrlSecret', {
           compartmentId: config.compartmentId,
           vaultId: config.vaultOcid,
           keyId: config.keyOcid,
           secretName: pgUrlSecretName,
-          description: 'PostgreSQL connection URL for test function (from PG_URL)',
+          description: 'PostgreSQL connection URL for function (from PG_URL)',
           secretContent: {
             contentType: 'BASE64',
             content: Buffer.from(config.pgUrl.trim(), 'utf-8').toString('base64'),
@@ -478,7 +484,7 @@ fi`;
       } else {
         // No Vault: pass PG_URL directly as function config (clear-text)
         console.warn(
-          '[OCI Test Function] WARNING: PG_URL is being passed to the function as plain config (clear-text). ' +
+          '[OCI Function] WARNING: PG_URL is being passed to the function as plain config (clear-text). ' +
           'Credentials are visible in function configuration. For production, store the connection string in OCI Vault and set ' +
           'OCI_VAULT_OCID and OCI_KEY_OCID so the stack creates a Vault secret; the function will then receive only PG_SECRET_OCID.'
         );
@@ -523,16 +529,20 @@ fi`;
     // -------------------------------------------------------------------------
     // API Gateway Deployment – route to function (only after function exists)
     // -------------------------------------------------------------------------
+    const pathPrefix = config.apiGwPathPrefix ?? '/';
+    const routePath = config.apiGwRoutePath ?? '/{path*}';
+    const methods = config.apiGwMethods?.length ? config.apiGwMethods : ['GET', 'POST', 'OPTIONS'];
+
     const apiDeployment = new ApigatewayDeployment(this, 'ApiDeployment', {
       compartmentId: config.compartmentId,
       gatewayId: apiGateway.id,
-      pathPrefix: '/',
+      pathPrefix,
       displayName: `${id}-deployment`,
       specification: {
         routes: [
           {
-            path: '/{path*}',
-            methods: ['GET', 'POST', 'OPTIONS'],
+            path: routePath,
+            methods,
             backend: {
               type: 'ORACLE_FUNCTIONS_BACKEND',
               functionId: ociFunction.id,
@@ -558,7 +568,7 @@ fi`;
 
     new TerraformOutput(this, 'function_invoke_url', {
       value: `https://${apiGateway.hostname}`,
-      description: 'Base URL to invoke the test function (use ?action=hello|echo|info)',
+      description: 'Base URL to invoke the function (use ?action=hello|echo|info)',
     });
 
     new TerraformOutput(this, 'function_id', {

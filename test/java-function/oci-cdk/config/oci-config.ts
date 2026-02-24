@@ -13,6 +13,11 @@
  * - OCI_FUNCTION_NAME
  * - OCI_OCIR_REPOSITORY_NAME (if unset, uses OCI_FUNCTION_APP_NAME)
  *
+ * Optional – API Gateway deployment (defaults: pathPrefix '/', route path '/{path*}', methods GET,POST,OPTIONS):
+ * - OCI_APIGW_PATH_PREFIX
+ * - OCI_APIGW_ROUTE_PATH
+ * - OCI_APIGW_METHODS (comma-separated, e.g. GET,POST,OPTIONS)
+ *
  * Optional (OCI CLI config): config file default is ~/.oci/config, profile default is DEFAULT.
  * - OCI_CONFIG_FILE – override config file path
  * - OCI_CLI_PROFILE – override profile name
@@ -96,14 +101,20 @@ export interface OciConfig {
   functionAppName: string;
   functionName: string;
   ocirRepositoryName?: string;
-  /** When set, stack creates Vault secret "test-pg-url" from this value (requires vaultOcid and keyOcid when using Vault). */
+  /** When set, stack creates Vault secret (pg-url) from this value (requires vaultOcid and keyOcid when using Vault). */
   pgUrl?: string;
-  /** Vault OCID for creating test-pg-url secret (required when pgUrl is set and using Vault). */
+  /** Vault OCID for creating pg-url secret (required when pgUrl is set and using Vault). */
   vaultOcid?: string;
-  /** KMS Key OCID for encrypting test-pg-url secret (required when vaultOcid is set). */
+  /** KMS Key OCID for encrypting pg-url secret (required when vaultOcid is set). */
   keyOcid?: string;
   /** When pgUrl is not set: use this existing OCI Vault secret OCID for PG (set PG_SECRET_OCID env var). */
   pgSecretOcid?: string;
+  /** API Gateway deployment path prefix (OCI_APIGW_PATH_PREFIX). Default '/'. */
+  apiGwPathPrefix?: string;
+  /** API Gateway route path (OCI_APIGW_ROUTE_PATH). Default '/{path*}'. */
+  apiGwRoutePath?: string;
+  /** API Gateway route methods (OCI_APIGW_METHODS). Default 'GET,POST,OPTIONS'. */
+  apiGwMethods?: string[];
   backend?: OciBackendConfig;
 }
 
@@ -115,7 +126,7 @@ const backendConfig: OciBackendConfig | undefined = backendType === 'local'
     ? {
         type: 'oci',
         bucket: process.env.OCI_STATE_BUCKET || 'tf-state',
-        key: process.env.OCI_STATE_KEY || 'test-function-stack/terraform.tfstate',
+        key: process.env.OCI_STATE_KEY || 'function-stack/terraform.tfstate',
       }
     : {
         type: 'http',
@@ -186,6 +197,11 @@ export async function getOciConfig(): Promise<OciConfig> {
 
   const ocirRepositoryName = process.env.OCI_OCIR_REPOSITORY_NAME?.trim() || functionAppName;
 
+  const apiGwMethodsStr = process.env.OCI_APIGW_METHODS?.trim();
+  const apiGwMethods = apiGwMethodsStr
+    ? apiGwMethodsStr.split(',').map((m) => m.trim()).filter(Boolean)
+    : undefined;
+
   return {
     compartmentId,
     ocirCompartmentId: ocirCompartmentOcid,
@@ -195,6 +211,9 @@ export async function getOciConfig(): Promise<OciConfig> {
     functionAppName,
     functionName,
     ocirRepositoryName,
+    apiGwPathPrefix: process.env.OCI_APIGW_PATH_PREFIX?.trim() || undefined,
+    apiGwRoutePath: process.env.OCI_APIGW_ROUTE_PATH?.trim() || undefined,
+    apiGwMethods: apiGwMethods && apiGwMethods.length > 0 ? apiGwMethods : undefined,
     pgUrl: process.env.PG_URL?.trim() || undefined,
     vaultOcid: process.env.OCI_VAULT_OCID?.trim() || undefined,
     keyOcid: process.env.OCI_KEY_OCID?.trim() || undefined,

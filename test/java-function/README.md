@@ -149,8 +149,14 @@ export OCI_TENANCY_ID="ocid1.tenancy.oc1..aaaaaaa..."
 export OCI_REGION="eu-frankfurt-1"
 export OCI_NAMESPACE="your-namespace"
 export OCI_OCIR_COMPARTMENT_ID="ocid1.compartment.oc1..aaaaaaa..."  # Non-root compartment
-export OCI_OCIR_REPOSITORY_NAME="test-java-function"
+export OCI_OCIR_REPOSITORY_NAME="java-function"
 ```
+
+Optional – API Gateway deployment (defaults: path prefix `/`, route path `/{path*}`, methods GET, POST, OPTIONS):
+
+- `OCI_APIGW_PATH_PREFIX` – deployment path prefix
+- `OCI_APIGW_ROUTE_PATH` – route path (e.g. `/{path*}`)
+- `OCI_APIGW_METHODS` – comma-separated methods (e.g. `GET,POST,OPTIONS`)
 
 ### Build Java Function
 
@@ -193,7 +199,7 @@ After infrastructure is deployed:
 ```bash
 # Get API URL from CDK output
 API_URL=$(aws cloudformation describe-stacks \
-  --stack-name TestFunctionStack \
+  --stack-name FunctionStack \
   --query 'Stacks[0].Outputs[?OutputKey==`ApiUrl`].OutputValue' \
   --output text)
 

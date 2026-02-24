@@ -7,15 +7,15 @@ import * as ec2 from 'aws-cdk-lib/aws-ec2';
 import * as rds from 'aws-cdk-lib/aws-rds';
 import * as path from 'path';
 
-export interface TestFunctionStackProps extends cdk.StackProps {
+export interface FunctionStackProps extends cdk.StackProps {
   /** PostgreSQL connection URL (same format as OCI: postgresql://user:password@host:port/dbname). When set, stack creates a Secrets Manager secret and passes its ARN to Lambda. Set PG_URL at deploy time. */
   readonly pgUrl?: string;
   /** When PG_URL is not set: ARN of existing Secrets Manager secret (e.g. RDS-generated JSON secret). Set PG_SECRET_ARN at deploy time. RDS is not created by this stack — create RDS manually in the stack VPC and allow the Lambda security group on port 5432. */
   readonly pgSecretArn?: string;
 }
 
-export class TestFunctionStack extends cdk.Stack {
-  constructor(scope: Construct, id: string, props?: TestFunctionStackProps) {
+export class FunctionStack extends cdk.Stack {
+  constructor(scope: Construct, id: string, props?: FunctionStackProps) {
     super(scope, id, props);
 
     const pgUrl = props?.pgUrl ?? process.env.PG_URL;
@@ -28,8 +28,8 @@ export class TestFunctionStack extends cdk.Stack {
     let pgSecretArn: string | undefined;
     if (pgUrl?.trim()) {
       const pgSecret = new secretsmanager.Secret(this, 'PgUrlSecret', {
-        secretName: `test-function-pg-url-${this.stackName}`,
-        description: 'PostgreSQL connection URL for test function (from PG_URL)',
+        secretName: `function-pg-url-${this.stackName}`,
+        description: 'PostgreSQL connection URL for function (from PG_URL)',
         secretStringValue: cdk.SecretValue.unsafePlainText(pgUrl.trim()),
       });
       pgSecretArn = pgSecret.secretArn;
@@ -46,7 +46,7 @@ export class TestFunctionStack extends cdk.Stack {
     });
 
     // Java Lambda function (in VPC private subnets so it can reach RDS and AWS APIs via NAT). Build JAR first (e.g. ./scripts/build-function.sh aws).
-    const javaFunction = new lambda.Function(this, 'TestJavaFunction', {
+    const javaFunction = new lambda.Function(this, 'JavaFunction', {
       runtime: lambda.Runtime.JAVA_11,
       handler: 'com.example.function.aws.AwsFunctionHandler',
       code: lambda.Code.fromAsset(
@@ -54,7 +54,7 @@ export class TestFunctionStack extends cdk.Stack {
       ),
       memorySize: 512,
       timeout: cdk.Duration.seconds(30),
-      description: 'Test Java function compatible with AWS Lambda and OCI Functions',
+      description: 'Java function compatible with AWS Lambda and OCI Functions',
       environment,
       vpc,
       vpcSubnets: { subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS },
@@ -87,9 +87,9 @@ export class TestFunctionStack extends cdk.Stack {
     }
 
     // API Gateway REST API
-    const api = new apigateway.RestApi(this, 'TestFunctionApi', {
-      restApiName: 'Test Java Function API',
-      description: 'API Gateway for test Java function',
+    const api = new apigateway.RestApi(this, 'FunctionApi', {
+      restApiName: 'Java Function API',
+      description: 'API Gateway for Java function',
       defaultCorsPreflightOptions: {
         allowOrigins: apigateway.Cors.ALL_ORIGINS,
         allowMethods: apigateway.Cors.ALL_METHODS,
@@ -111,43 +111,43 @@ export class TestFunctionStack extends cdk.Stack {
     new cdk.CfnOutput(this, 'ApiUrl', {
       value: api.url,
       description: 'API Gateway endpoint URL',
-      exportName: 'TestFunctionApiUrl',
+      exportName: 'FunctionApiUrl',
     });
 
     new cdk.CfnOutput(this, 'FunctionName', {
       value: javaFunction.functionName,
       description: 'Lambda function name',
-      exportName: 'TestFunctionName',
+      exportName: 'FunctionName',
     });
 
     new cdk.CfnOutput(this, 'FunctionArn', {
       value: javaFunction.functionArn,
       description: 'Lambda function ARN',
-      exportName: 'TestFunctionArn',
+      exportName: 'FunctionArn',
     });
 
     new cdk.CfnOutput(this, 'VpcId', {
       value: vpc.vpcId,
       description: 'VPC ID — create RDS in this VPC',
-      exportName: 'TestFunctionVpcId',
+      exportName: 'FunctionVpcId',
     });
 
     new cdk.CfnOutput(this, 'LambdaSecurityGroupId', {
       value: lambdaSg.securityGroupId,
       description: 'Lambda security group ID',
-      exportName: 'TestFunctionLambdaSecurityGroupId',
+      exportName: 'FunctionLambdaSecurityGroupId',
     });
 
     new cdk.CfnOutput(this, 'RdsSecurityGroupId', {
       value: rdsSg.securityGroupId,
       description: 'Assign this security group to RDS - stack allows inbound 5432 from Lambda',
-      exportName: 'TestFunctionRdsSecurityGroupId',
+      exportName: 'FunctionRdsSecurityGroupId',
     });
 
     new cdk.CfnOutput(this, 'DbSubnetGroupName', {
       value: dbSubnetGroup.subnetGroupName,
       description: 'Select this DB subnet group when creating RDS in this VPC',
-      exportName: 'TestFunctionDbSubnetGroupName',
+      exportName: 'FunctionDbSubnetGroupName',
     });
   }
 }

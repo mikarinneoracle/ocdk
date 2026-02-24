@@ -26,12 +26,12 @@ echo "Getting OCIR repository name from Terraform output..."
 cd "${OCDK_DIR}"
 
 # Try to get repository name from Terraform output
-# cdktf output format: "ocir_repository_name = \"test-java-function\""
+# cdktf output format: "ocir_repository_name = \"java-function\""
 REPO_NAME=$(cdktf output ocir_repository_name 2>/dev/null | grep -E '^\s*ocir_repository_name\s*=' | sed -E 's/.*=\s*"([^"]+)".*/\1/' || echo "")
 
 if [ -z "${REPO_NAME}" ]; then
     echo "Warning: Could not get repository name from Terraform output. Using default."
-    REPO_NAME="${OCI_OCIR_REPOSITORY_NAME:-test-java-function}"
+    REPO_NAME="${OCI_OCIR_REPOSITORY_NAME:-java-function}"
 else
     echo "Found repository name: ${REPO_NAME}"
 fi

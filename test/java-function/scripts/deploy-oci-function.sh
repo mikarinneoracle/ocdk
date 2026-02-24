@@ -4,11 +4,11 @@ set -e
 
 # Configuration
 COMPARTMENT_ID="${OCI_COMPARTMENT_ID}"
-APP_NAME="${OCI_FUNCTION_APP_NAME:-test-function-app}"
-FUNCTION_NAME="${OCI_FUNCTION_NAME:-test-java-function}"
+APP_NAME="${OCI_FUNCTION_APP_NAME:-function-app}"
+FUNCTION_NAME="${OCI_FUNCTION_NAME:-java-function}"
 REGION="${OCI_REGION:-eu-frankfurt-1}"
 NAMESPACE="${OCI_NAMESPACE}"
-REPO_NAME="${OCI_OCIR_REPOSITORY_NAME:-test-java-function}"
+REPO_NAME="${OCI_OCIR_REPOSITORY_NAME:-java-function}"
 IMAGE_TAG="${REGION}.ocir.io/${NAMESPACE}/${REPO_NAME}:latest"
 
 if [ -z "${COMPARTMENT_ID}" ] || [ -z "${NAMESPACE}" ]; then

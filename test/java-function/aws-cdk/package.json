@@ -1,7 +1,7 @@
 {
-  "name": "aws-cdk-test-function",
+  "name": "aws-cdk-function",
   "version": "1.0.0",
-  "description": "AWS CDK stack for testing Java Lambda function",
+  "description": "AWS CDK stack for Java Lambda function",
   "main": "lib/app.js",
   "scripts": {
     "build": "tsc",

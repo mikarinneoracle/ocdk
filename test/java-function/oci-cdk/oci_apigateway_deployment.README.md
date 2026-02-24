@@ -11,4 +11,4 @@ So the route setup is fully done by the stack; the function OCID is wired automa
 - **CLI-only workflow:** If you create the gateway and function outside Terraform, you can create the deployment with:
   - Replace `<FUNCTION_OCID>` in `oci_apigateway_deployment.json` with the real function OCID.
   - `oci api-gateway deployment create --compartment-id $compartment_ocid --gateway-id $gateway_ocid --specification file://./oci_apigateway_deployment.json`
-- **Reference:** The JSON mirrors the deployment specification defined in `lib/test-function-stack.ts`.
+- **Reference:** The JSON mirrors the deployment specification defined in `lib/function-stack.ts`.

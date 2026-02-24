@@ -1,7 +1,7 @@
 {
-  "name": "oci-cdk-test-function",
+  "name": "oci-cdk-function",
   "version": "1.0.0",
-  "description": "OCI OCDK stack for testing Java function",
+  "description": "OCI CDK stack for Java function",
   "main": "lib/index.js",
   "scripts": {
     "build": "tsc",

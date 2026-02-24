@@ -5,7 +5,7 @@ set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 OCDK_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
-STACK_NAME="${OCI_STACK_NAME:-test-function-stack}"
+STACK_NAME="${OCI_STACK_NAME:-function-stack}"
 
 echo "Step 1: Building OCI Java function JAR..."
 "${OCDK_DIR}/../scripts/build-function.sh" oci

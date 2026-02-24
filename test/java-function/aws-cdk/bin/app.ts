@@ -1,16 +1,16 @@
 #!/usr/bin/env node
 import 'source-map-support/register';
 import * as cdk from 'aws-cdk-lib';
-import { TestFunctionStack } from '../lib/test-function-stack';
+import { FunctionStack } from '../lib/function-stack';
 
 const app = new cdk.App();
 
-new TestFunctionStack(app, 'TestFunctionStack', {
+new FunctionStack(app, 'FunctionStack', {
   env: {
     account: process.env.CDK_DEFAULT_ACCOUNT,
     region: process.env.CDK_DEFAULT_REGION || 'us-east-1',
   },
-  description: 'Test stack for Java Lambda function',
+  description: 'Stack for Java Lambda function',
   pgUrl: process.env.PG_URL,
   pgSecretArn: process.env.PG_SECRET_ARN,
 });

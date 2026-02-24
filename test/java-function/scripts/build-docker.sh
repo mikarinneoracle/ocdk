@@ -8,7 +8,7 @@ FUNCTION_DIR="${SCRIPT_DIR}/../function-code"
 # Configuration from environment
 REGION="${OCI_REGION:-eu-frankfurt-1}"
 NAMESPACE="${OCI_NAMESPACE}"
-REPO_NAME="${OCI_OCIR_REPOSITORY_NAME:-test-java-function}"
+REPO_NAME="${OCI_OCIR_REPOSITORY_NAME:-java-function}"
 IMAGE_TAG="${REGION}.ocir.io/${NAMESPACE}/${REPO_NAME}:latest"
 
 if [ -z "${NAMESPACE}" ]; then

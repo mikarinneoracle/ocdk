@@ -4,8 +4,9 @@
 node_modules/
 package-lock.json
 
-# Dev and test
+# Dev and test (exclude from package; root tsconfig also excludes test so lib/test/ is not built)
 test/
+lib/test/
 *.test.ts
 *.spec.ts
 jest.config.*

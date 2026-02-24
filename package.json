@@ -1,13 +1,13 @@
 {
   "name": "@mikarinneoracle/oci-cdk",
-  "version": "1.0.1",
+  "version": "1.0.24",
   "description": "OCI CDK stack for OCI Functions, API Gateway, and related infrastructure",
   "main": "lib/index.js",
   "bin": {
     "ocdk": "./bin/ocdk.js"
   },
   "scripts": {
-    "build": "tsc",
+    "build": "node bin/build-if-needed.js",
     "compile": "tsc",
     "watch": "tsc -w",
     "test": "jest",
@@ -19,7 +19,7 @@
     "get": "cdktf get",
     "synth": "cdktf synth",
     "list": "cdktf list",
-    "prepublishOnly": "npm run build"
+    "prepublishOnly": "npm run get && npm run compile && npm run build && node -e \"var fs=require('fs'),path=require('path'),s='lib/config',d='config'; if(fs.existsSync(s)){if(!fs.existsSync(d))fs.mkdirSync(d,{recursive:true});fs.readdirSync(s).forEach(function(f){fs.copyFileSync(path.join(s,f),path.join(d,f));});}\""
   },
   "keywords": [
     "oci",
@@ -35,11 +35,14 @@
   },
   "bugs": { "url": "https://github.com/mikarinneoracle/ocdk/issues" },
   "homepage": "https://github.com/mikarinneoracle/ocdk#readme",
-  "files": ["bin", "lib", "README.md", "cdktf.json", "ocdk.json"],
+  "readme": "README.md",
+  "files": ["README.md", "bin", "lib", ".gen", "config", "cdktf.json", "ocdk.json"],
   "publishConfig": { "access": "public" },
   "dependencies": {
     "cdktf": "^0.21.0",
-    "constructs": "^10.0.0"
+    "constructs": "^10.0.0",
+    "oci-common": "^2.120.0",
+    "oci-objectstorage": "^2.120.0"
   },
   "devDependencies": {
     "@types/node": "^18.0.0",

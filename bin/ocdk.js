@@ -7,9 +7,11 @@
 const { spawnSync } = require('child_process');
 const path = require('path');
 
+const fs = require('fs');
 const root = path.join(__dirname, '..');
 const args = process.argv.slice(2);
 const command = args[0];
+const projectDirFile = path.join(root, '.ocdk-project-dir');
 
 const npmRunCommands = ['deploy', 'diff', 'synth', 'destroy', 'list', 'get'];
 
@@ -36,12 +38,24 @@ Examples:
 }
 
 // Use npm run <command> so we use project's cdktf without requiring global CLI
+// Pass caller's cwd so the stack can find func.yaml and target/ in a Java project (env + file fallback)
 if (npmRunCommands.includes(command)) {
+  const projectDir = process.cwd();
+  const env = { ...process.env, OCDK_PROJECT_DIR: projectDir };
+  try {
+    fs.writeFileSync(projectDirFile, projectDir, 'utf8');
+  } catch (e) {
+    // ignore if package dir not writable
+  }
   const result = spawnSync('npm', ['run', '--silent', command, '--', ...args.slice(1)], {
     stdio: 'inherit',
     cwd: root,
     shell: true,
+    env,
   });
+  try {
+    if (fs.existsSync(projectDirFile)) fs.unlinkSync(projectDirFile);
+  } catch (e) {}
   process.exit(result.status ?? 1);
 }
 

@@ -1,0 +1,10 @@
+# Exclude from build context (faster builds, smaller images)
+node_modules
+.git
+.gitignore
+*.md
+.terraform
+terraform.tfstate*
+cdktf.out
+.env
+.env.*

@@ -6,6 +6,43 @@ Infrastructure as Code for OCI Functions, API Gateway, Object Storage, Vault, an
 
 **Note**: OCDK uses `cdktf` CLI under the hood. All `ocdk` commands are npm scripts that wrap `cdktf` commands.
 
+## Using from npm
+
+When you install this package in another project (e.g. `npm i @mikarinneoracle/oci-cdk`), run commands **from your project root** using `npx` so the correct package is used:
+
+```bash
+# From your project root (e.g. ocdk-test-java)
+export OCI_COMPARTMENT_OCID="ocid1.compartment.oc1..aaaaaaa..."
+export OCI_TENANCY_ID="ocid1.tenancy.oc1..aaaaaaa..."
+export OCI_REGION="eu-frankfurt-1"
+# ... other OCI_* vars as needed
+
+npx ocdk deploy
+npx ocdk diff
+npx ocdk destroy
+```
+
+- **Do not** run `npm run deploy` from `node_modules/@mikarinneoracle` (the scope folder). The package with the scripts is **`node_modules/@mikarinneoracle/oci-cdk`**. If you want to use npm scripts from inside the package: `cd node_modules/@mikarinneoracle/oci-cdk && npm run deploy`.
+- The **`ocdk`** command is provided by the package’s `bin`; use **`npx ocdk`** from your project root so npm finds it in `node_modules/.bin/ocdk`.
+
+### What the npm package creates
+
+- **Always:** OCI Provider and **OCIR Container Repository**.
+
+- **When `func.yaml` + `target/*.jar` + `Dockerfile` are found** (e.g. you run `npx ocdk deploy` from your Java project root): the stack discovers the function **name** from `func.yaml` and a JAR under `target/`, and then creates the **full** deployment:
+  - Docker build and push to OCIR
+  - VCN, subnets, security lists, service gateway, internet gateway
+  - Functions Application and Function (image from OCIR)
+  - API Gateway and deployment (route to the function)
+
+**Requirements for full stack:** Run `npx ocdk deploy` from the directory that contains:
+
+- **`func.yaml`** – OCI Functions config with a `name:` field (function name).
+- **`target/*.jar`** – at least one JAR (e.g. from `mvn package`); preferred JAR can match the function name.
+- **`Dockerfile`** – to build the function image (e.g. `COPY target/*.jar /function/app/` and appropriate `CMD`).
+
+You can override discovery with env: `OCI_FUNCTION_APP_NAME`, `OCI_FUNCTION_NAME`, `OCI_FUNCTION_JAR_PATH` (path to directory with Dockerfile). Set **`OCI_OCIR_COMPARTMENT_ID`** (non-root) when using the full stack.
+
 ## Quick Start
 
 ### Prerequisites

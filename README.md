@@ -140,6 +140,7 @@ CDK-style commands (same as AWS CDK):
 **Other:**
 - `npm run build` – Compile TypeScript
 - `npm run watch` – Watch mode for TypeScript
+- `npm run redeploy:function` – Redeploy function code to OCI only (no Terraform; requires a `redeploy:function` script in your project, e.g. calling OCI CLI)
 - `npm run cdktf -- <args>` – Pass through to cdktf (e.g. `npm run cdktf -- output`)
 
 ## Structure

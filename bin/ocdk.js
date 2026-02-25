@@ -40,11 +40,30 @@ Examples:
   process.exit(args[0] === '--help' || args[0] === '-h' ? 0 : 1);
 }
 
-// redeploy:function runs in the caller's project (full Maven build in Docker, push, update)
+// redeploy:function: run project script if present, else default (docker build + push from cwd)
 if (command === 'redeploy:function') {
-  const result = spawnSync('npm', ['run', 'redeploy:function', '--', ...args.slice(1)], {
+  const cwd = process.cwd();
+  let hasScript = false;
+  try {
+    const pkgPath = path.join(cwd, 'package.json');
+    if (fs.existsSync(pkgPath)) {
+      const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
+      hasScript = pkg.scripts && typeof pkg.scripts['redeploy:function'] === 'string';
+    }
+  } catch (e) {}
+  if (hasScript) {
+    const result = spawnSync('npm', ['run', 'redeploy:function', '--', ...args.slice(1)], {
+      stdio: 'inherit',
+      cwd,
+      shell: true,
+      env: process.env,
+    });
+    process.exit(result.status ?? 1);
+  }
+  const defaultScript = path.join(root, 'bin', 'redeploy-function.js');
+  const result = spawnSync('node', [defaultScript, ...args.slice(1)], {
     stdio: 'inherit',
-    cwd: process.cwd(),
+    cwd,
     shell: true,
     env: process.env,
   });

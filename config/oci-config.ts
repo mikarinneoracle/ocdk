@@ -215,7 +215,7 @@ function getFuncYamlConfig(projectDir: string): Record<string, string> | undefin
       }
       if (inConfig) {
         if (trimmed !== '' && !line.startsWith(' ') && !line.startsWith('\t')) break;
-        const kv = line.match(/^\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*:\s*(.*)$/);
+        const kv = line.match(/^\s+([a-zA-Z_][a-zA-Z0-9_-]*)\s*:\s*(.*)$/);
         if (kv) {
           const key = kv[1].trim();
           let val = kv[2].trim();

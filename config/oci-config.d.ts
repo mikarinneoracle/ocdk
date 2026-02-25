@@ -11,6 +11,9 @@
  * - OCI_FUNCTION_NAME (Function name; default empty)
  * - OCI_FUNCTION_HANDLER (Java FDK CMD handler, e.g. com.example.Handler::handleRequest; from func.yaml cmd/handler if unset)
  * - OCI_FUNCTION_JAR_PATH (Path to JAR or project dir for function image; default empty)
+ * - OCI_FUNCTION_MEMORY_MB (function memory in MB; from func.yaml memory if unset)
+ * - OCI_FUNCTION_TIMEOUT_SECONDS (function timeout in seconds; from func.yaml timeout if unset)
+ * - OCI_FUNCTION_CONFIG (JSON object string for function config/env; merged with func.yaml config)
  * - OCDK_PROJECT_DIR (set by ocdk CLI to caller cwd; used to discover func.yaml and target/)
  * - OCI_STATE_BUCKET (for remote state)
  * - OCI_STATE_BACKEND_TYPE (oci|http|local)
@@ -48,6 +51,12 @@ export interface OciConfig {
     /** When true, deploy uses a thin Dockerfile (COPY target/*.jar only); full Maven build only in redeploy:function. */
     useThinDockerfile?: boolean;
     ocirRepositoryName?: string;
+    /** Function memory in MB (128, 256, 512, 1024, 2048, 3072). From func.yaml memory or OCI_FUNCTION_MEMORY_MB. */
+    functionMemoryMb?: string;
+    /** Function timeout in seconds (1–300). From func.yaml timeout or OCI_FUNCTION_TIMEOUT_SECONDS. */
+    functionTimeoutSeconds?: number;
+    /** Function config/env key-value. From func.yaml config or OCI_FUNCTION_CONFIG (JSON object string). */
+    functionConfig?: Record<string, string>;
     backend?: OciBackendConfig;
 }
 /** OCIR short region keys (e.g. eu-frankfurt-1 -> fra). Used so login, build, push and function image all use same registry host. */

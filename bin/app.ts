@@ -20,6 +20,7 @@ import { getOciConfig } from '../config/oci-config';
     dockerContextPath: ociConfig.dockerContextPath,
     imageTag: ociConfig.imageTag,
     handler: ociConfig.handler,
+    useThinDockerfile: ociConfig.useThinDockerfile,
     ocirRepositoryName: ociConfig.ocirRepositoryName,
     backend: ociConfig.backend,
   });

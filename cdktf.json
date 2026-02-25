@@ -3,7 +3,7 @@
   "app": "npm run --silent build && node lib/bin/app.js",
   "projectId": "oci-infrastructure",
   "terraformProviders": [
-    "oci@~> 5.0"
+    "oracle/oci@>= 5.0.0, < 6.0.0"
   ],
   "terraformModules": [],
   "context": {

@@ -20,8 +20,12 @@ export OCI_REGION="eu-frankfurt-1"
 npx ocdk deploy
 npx ocdk diff
 npx ocdk destroy
+npx ocdk get    # Regenerate provider bindings (use this, not `npx cdktf get`, so it runs in the package that has cdktf.json)
+npx ocdk redeploy:function   # Rebuild image (full Dockerfile), push, update function (requires a "redeploy:function" script in your project's package.json)
 ```
 
+- **Use `npx ocdk get`**, not `npx cdktf get`, when you need to regenerate provider bindings.
+- **`npx ocdk redeploy:function`** runs `npm run redeploy:function` in your project directory. Add a script to your `package.json`, e.g. one that builds the image with your full Dockerfile, pushes to OCIR, and updates the function (e.g. via `oci fn function update` or a second `terraform apply`). `cdktf get` must run in the directory that contains `cdktf.json` (the ocdk package); otherwise you may see "argument missing: language".
 - **Do not** run `npm run deploy` from `node_modules/@mikarinneoracle` (the scope folder). The package with the scripts is **`node_modules/@mikarinneoracle/oci-cdk`**. If you want to use npm scripts from inside the package: `cd node_modules/@mikarinneoracle/oci-cdk && npm run deploy`.
 - The **`ocdk`** command is provided by the package’s `bin`; use **`npx ocdk`** from your project root so npm finds it in `node_modules/.bin/ocdk`.
 

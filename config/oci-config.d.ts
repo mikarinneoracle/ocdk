@@ -45,6 +45,8 @@ export interface OciConfig {
     imageTag?: string;
     /** Java FDK CMD handler (from func.yaml cmd/handler or OCI_FUNCTION_HANDLER; default below). */
     handler?: string;
+    /** When true, deploy uses a thin Dockerfile (COPY target/*.jar only); full Maven build only in redeploy:function. */
+    useThinDockerfile?: boolean;
     ocirRepositoryName?: string;
     backend?: OciBackendConfig;
 }

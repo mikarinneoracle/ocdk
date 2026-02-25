@@ -1,6 +1,6 @@
 {
   "name": "@mikarinneoracle/oci-cdk",
-  "version": "1.0.24",
+  "version": "1.0.35",
   "description": "OCI CDK stack for OCI Functions, API Gateway, and related infrastructure",
   "main": "lib/index.js",
   "bin": {
@@ -33,20 +33,37 @@
     "type": "git",
     "url": "git+https://github.com/mikarinneoracle/ocdk.git"
   },
-  "bugs": { "url": "https://github.com/mikarinneoracle/ocdk/issues" },
+  "bugs": {
+    "url": "https://github.com/mikarinneoracle/ocdk/issues"
+  },
   "homepage": "https://github.com/mikarinneoracle/ocdk#readme",
   "readme": "README.md",
-  "files": ["README.md", "bin", "lib", ".gen", "config", "cdktf.json", "ocdk.json"],
-  "publishConfig": { "access": "public" },
+  "files": [
+    "README.md",
+    "bin",
+    "lib",
+    ".gen",
+    "config",
+    "cdktf.json",
+    "ocdk.json"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
   "dependencies": {
     "cdktf": "^0.21.0",
+    "cdktf-cli": "^0.21.0",
     "constructs": "^10.0.0",
     "oci-common": "^2.120.0",
     "oci-objectstorage": "^2.120.0"
   },
   "devDependencies": {
     "@types/node": "^18.0.0",
-    "cdktf-cli": "^0.21.0",
     "typescript": "^5.0.0"
+  },
+  "overrides": {
+    "uuid": "^9.0.0",
+    "jssha": "^3.3.0",
+    "glob": "^13.0.0"
   }
 }

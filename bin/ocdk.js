@@ -27,14 +27,28 @@ Commands (same as CDK):
   synth       Synthesize Terraform
   destroy     Destroy the stack
   list        List stacks
-  get         Generate provider bindings
+  get                Generate provider bindings (run from project root; use ocdk get, not cdktf get)
+  redeploy:function  Rebuild function image (full Dockerfile), push to OCIR, update function (runs npm run redeploy:function in your project)
 
 Examples:
   ocdk deploy
   ocdk diff
+  ocdk get
+  ocdk redeploy:function
   ocdk deploy --auto-approve
 `);
   process.exit(args[0] === '--help' || args[0] === '-h' ? 0 : 1);
+}
+
+// redeploy:function runs in the caller's project (full Maven build in Docker, push, update)
+if (command === 'redeploy:function') {
+  const result = spawnSync('npm', ['run', 'redeploy:function', '--', ...args.slice(1)], {
+    stdio: 'inherit',
+    cwd: process.cwd(),
+    shell: true,
+    env: process.env,
+  });
+  process.exit(result.status ?? 1);
 }
 
 // Use npm run <command> so we use project's cdktf without requiring global CLI

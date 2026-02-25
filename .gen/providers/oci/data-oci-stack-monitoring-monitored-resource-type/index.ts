@@ -236,7 +236,7 @@ export class DataOciStackMonitoringMonitoredResourceType extends cdktf.Terraform
       terraformGeneratorMetadata: {
         providerName: 'oci',
         providerVersion: '5.47.0',
-        providerVersionConstraint: '~> 5.0'
+        providerVersionConstraint: '>= 5.0.0, < 6.0.0'
       },
       provider: config.provider,
       dependsOn: config.dependsOn,

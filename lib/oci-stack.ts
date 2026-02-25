@@ -34,6 +34,8 @@ export interface OciStackConfig {
   imageTag?: string;
   /** Java FDK CMD handler (from func.yaml or OCI_FUNCTION_HANDLER). */
   handler?: string;
+  /** When true, deploy uses thin Dockerfile (no Maven in image); full build only in redeploy:function. */
+  useThinDockerfile?: boolean;
   ocirRepositoryName?: string;
   /** API Gateway deployment path prefix. Default '/'. */
   apiGwPathPrefix?: string;
@@ -109,6 +111,7 @@ export class OciStack extends TerraformStack {
       const ocirRegistry = `${ocirHostKey(config.region)}.ocir.io`;
       const imageUrl = getOciImageUrl(config);
       const appName = config.functionAppName || config.functionName!;
+      const resourceName = appName;
 
       this.addOverride('terraform.required_providers.null', {
         source: 'hashicorp/null',
@@ -123,6 +126,7 @@ export class OciStack extends TerraformStack {
         image_url: imageUrl,
         image_tag: imageTag,
         handler: config.handler || '',
+        use_thin_dockerfile: config.useThinDockerfile === true ? '1' : '0',
         namespace: config.namespace,
         region: config.region,
       });
@@ -133,7 +137,13 @@ export class OciStack extends TerraformStack {
         ? `export OCIR_AUTH_TOKEN="${process.env.OCI_AUTH_TOKEN}"; OCIR_USER="${ocirUser}"; [ "$OCIR_USER" = "AUTO_DETECT" ] && OCIR_USER="${namespaceP}/user"; echo "$OCIR_AUTH_TOKEN" | docker login ${ocirRegistry} -u "$OCIR_USER" --password-stdin || exit 1`
         : `oci raw-request --region ${regionP} --http-method GET --target-uri "https://${ocirRegistry}/20180419/docker/token" 2>/dev/null | (command -v jq >/dev/null && jq -r .data.token || grep -o '"token":"[^"]*"' | cut -d'"' -f4) | docker login -u BEARER_TOKEN --password-stdin ${ocirRegistry} || (echo "Set OCI_AUTH_TOKEN or configure OCI CLI" >&2; exit 1)`;
       const handler = config.handler || 'com.example.fn.HelloFunction::handleRequest';
-      const dockerfileContent = `FROM fnproject/fn-java-fdk-build:jdk17-1.1.5 as build-stage
+      const useThin = config.useThinDockerfile === true;
+      const dockerfileContentThin = `FROM fnproject/fn-java-fdk:jre17-1.1.5
+WORKDIR /function
+COPY target/*.jar /function/app/
+CMD ["${handler.replace(/"/g, '\\"')}"]
+`;
+      const dockerfileContentFull = `FROM fnproject/fn-java-fdk-build:jdk17-1.1.5 as build-stage
 WORKDIR /function
 ENV MAVEN_OPTS -Dhttp.proxyHost= -Dhttp.proxyPort= -Dhttps.proxyHost= -Dhttps.proxyPort= -Dhttp.nonProxyHosts= -Dmaven.repo.local=/usr/share/maven/ref/repository
 ADD pom.xml /function/pom.xml
@@ -145,6 +155,7 @@ WORKDIR /function
 COPY --from=build-stage /function/target/*.jar /function/app/
 CMD ["${handler.replace(/"/g, '\\"')}"]
 `;
+      const dockerfileContent = useThin ? dockerfileContentThin : dockerfileContentFull;
       const dockerignoreContent = `node_modules
 .git
 *.md
@@ -155,11 +166,11 @@ CMD ["${handler.replace(/"/g, '\\"')}"]
 `;
       const dockerfileB64 = Buffer.from(dockerfileContent, 'utf8').toString('base64');
       const dockerignoreB64 = Buffer.from(dockerignoreContent, 'utf8').toString('base64');
-      // Generate Dockerfile and .dockerignore in local-exec (excludes node_modules), then login, build (tag from func.yaml/OCI_IMAGE_TAG), push
+      // Generate Dockerfile and .dockerignore in local-exec only if missing; if they exist use as-is. Then login, build, push.
       this.addOverride(`resource.null_resource.${buildAndPushImageId}.provisioner`, [
         {
           'local-exec': {
-            command: 'cd "$FUNCTION_CODE_PATH" && echo "$DOCKERFILE_B64" | base64 -d > Dockerfile && echo "$DOCKERIGNORE_B64" | base64 -d > .dockerignore',
+            command: 'cd "$FUNCTION_CODE_PATH" && ([ -f Dockerfile ] || (echo "$DOCKERFILE_B64" | base64 -d > Dockerfile)) && ([ -f .dockerignore ] || (echo "$DOCKERIGNORE_B64" | base64 -d > .dockerignore))',
             environment: {
               FUNCTION_CODE_PATH: functionCodePath,
               DOCKERFILE_B64: dockerfileB64,
@@ -168,20 +179,20 @@ CMD ["${handler.replace(/"/g, '\\"')}"]
           },
         },
         { 'local-exec': { command: loginScript, on_failure: 'continue' } },
-        { 'local-exec': { command: `cd "${functionCodePath.replace(/"/g, '\\"')}" && docker build --no-cache --platform linux/amd64 -t ${imageUrl} .` } },
+        { 'local-exec': { command: `cd "${functionCodePath.replace(/"/g, '\\"')}" && docker build --platform linux/amd64 -t ${imageUrl} .` } },
         { 'local-exec': { command: `docker push ${imageUrl}` } },
       ]);
 
       const vcn = new CoreVcn(this, 'Vcn', {
         compartmentId: config.compartmentId,
-        displayName: `${id}-vcn`,
+        displayName: `${resourceName}-vcn`,
         cidrBlocks: ['10.0.0.0/16'],
         dnsLabel: 'appfn',
       });
       const publicSubnet = new CoreSubnet(this, 'PublicSubnet', {
         compartmentId: config.compartmentId,
         vcnId: vcn.id,
-        displayName: `${id}-public`,
+        displayName: `${resourceName}-public`,
         cidrBlock: '10.0.1.0/24',
         dnsLabel: 'public',
         prohibitPublicIpOnVnic: false,
@@ -189,7 +200,7 @@ CMD ["${handler.replace(/"/g, '\\"')}"]
       const privateSubnet = new CoreSubnet(this, 'PrivateSubnet', {
         compartmentId: config.compartmentId,
         vcnId: vcn.id,
-        displayName: `${id}-private`,
+        displayName: `${resourceName}-private`,
         cidrBlock: '10.0.2.0/24',
         dnsLabel: 'private',
         prohibitPublicIpOnVnic: true,
@@ -198,7 +209,7 @@ CMD ["${handler.replace(/"/g, '\\"')}"]
       const publicSl = new CoreSecurityList(this, 'PublicSecurityList', {
         compartmentId: config.compartmentId,
         vcnId: vcn.id,
-        displayName: `${id}-public-sl`,
+        displayName: `${resourceName}-public-sl`,
         ingressSecurityRules: [
           { protocol: '6', source: '0.0.0.0/0', description: 'HTTP', tcpOptions: { min: 80, max: 80 } },
           { protocol: '6', source: '0.0.0.0/0', description: 'HTTPS', tcpOptions: { min: 443, max: 443 } },
@@ -209,7 +220,7 @@ CMD ["${handler.replace(/"/g, '\\"')}"]
       const privateSl = new CoreSecurityList(this, 'PrivateSecurityList', {
         compartmentId: config.compartmentId,
         vcnId: vcn.id,
-        displayName: `${id}-private-sl`,
+        displayName: `${resourceName}-private-sl`,
         ingressSecurityRules: [
           { protocol: '6', source: '10.0.2.0/24', description: 'PG', tcpOptions: { min: 5432, max: 5432 } },
         ],
@@ -221,13 +232,13 @@ CMD ["${handler.replace(/"/g, '\\"')}"]
       const svcGw = new CoreServiceGateway(this, 'ServiceGateway', {
         compartmentId: config.compartmentId,
         vcnId: vcn.id,
-        displayName: `${id}-sgw`,
+        displayName: `${resourceName}-sgw`,
         services: [{ serviceId: allServices.services.get(0).id }],
       });
       const privRt = new CoreRouteTable(this, 'PrivateRouteTable', {
         compartmentId: config.compartmentId,
         vcnId: vcn.id,
-        displayName: `${id}-private-rt`,
+        displayName: `${resourceName}-private-rt`,
         routeRules: [
           { networkEntityId: svcGw.id, destination: allServices.services.get(0).cidrBlock, destinationType: 'SERVICE_CIDR_BLOCK', description: 'OCIR' },
         ],
@@ -236,13 +247,13 @@ CMD ["${handler.replace(/"/g, '\\"')}"]
       const igw = new CoreInternetGateway(this, 'InternetGateway', {
         compartmentId: config.compartmentId,
         vcnId: vcn.id,
-        displayName: `${id}-igw`,
+        displayName: `${resourceName}-igw`,
         enabled: true,
       });
       const pubRt = new CoreRouteTable(this, 'PublicRouteTable', {
         compartmentId: config.compartmentId,
         vcnId: vcn.id,
-        displayName: `${id}-public-rt`,
+        displayName: `${resourceName}-public-rt`,
         routeRules: [
           { networkEntityId: igw.id, destination: '0.0.0.0/0', destinationType: 'CIDR_BLOCK', description: 'Internet' },
         ],
@@ -253,7 +264,7 @@ CMD ["${handler.replace(/"/g, '\\"')}"]
         compartmentId: config.compartmentId,
         subnetId: publicSubnet.id,
         endpointType: 'PUBLIC',
-        displayName: `${id}-api-gateway`,
+        displayName: `${resourceName}-api-gateway`,
       });
       const functionApp = new FunctionsApplication(this, 'FunctionApp', {
         compartmentId: config.compartmentId,
@@ -275,7 +286,7 @@ CMD ["${handler.replace(/"/g, '\\"')}"]
         compartmentId: config.compartmentId,
         gatewayId: apiGateway.id,
         pathPrefix,
-        displayName: `${id}-deployment`,
+        displayName: `${resourceName}-deployment`,
         specification: {
           routes: [{ path: routePath, methods, backend: { type: 'ORACLE_FUNCTIONS_BACKEND', functionId: ociFunction.id } }],
         },
@@ -287,5 +298,11 @@ CMD ["${handler.replace(/"/g, '\\"')}"]
       new TerraformOutput(this, 'function_invoke_url', { value: `https://${apiGateway.hostname}`, description: 'Base URL to invoke the function' });
       new TerraformOutput(this, 'function_id', { value: ociFunction.id, description: 'OCI Function OCID' });
     }
+
+    // Force oracle/oci (Terraform Registry) so terraform init uses it on OL8 and elsewhere; must run after provider is added
+    this.addOverride('terraform.required_providers.oci', {
+      source: 'oracle/oci',
+      version: '>= 5.0.0, < 6.0.0',
+    });
   }
 }

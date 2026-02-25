@@ -53,6 +53,8 @@ export interface OciConfig {
   imageTag?: string;
   /** Java FDK CMD handler (from func.yaml cmd/handler or OCI_FUNCTION_HANDLER; default below). */
   handler?: string;
+  /** When true, deploy uses a thin Dockerfile (COPY target/*.jar only); full Maven build only in redeploy:function. */
+  useThinDockerfile?: boolean;
   ocirRepositoryName?: string;
   backend?: OciBackendConfig;
 }
@@ -218,7 +220,7 @@ function hasPomAndSrc(projectDir: string): boolean {
   }
 }
 
-function discoverFromFuncYamlAndTarget(): { functionName?: string; functionAppName?: string; dockerContextPath?: string; imageTag?: string; handler?: string } {
+function discoverFromFuncYamlAndTarget(): { functionName?: string; functionAppName?: string; dockerContextPath?: string; imageTag?: string; handler?: string; useThinDockerfile?: boolean } {
   let projectDir = process.env.OCDK_PROJECT_DIR?.trim();
   if (!projectDir) {
     try {
@@ -244,6 +246,7 @@ function discoverFromFuncYamlAndTarget(): { functionName?: string; functionAppNa
   const functionName = process.env.OCI_FUNCTION_NAME?.trim() || nameFromYaml || path.basename(projectDir) || 'oci-function';
   const imageTag = process.env.OCI_IMAGE_TAG?.trim() || getFuncYamlVersion(projectDir);
   const handler = process.env.OCI_FUNCTION_HANDLER?.trim() || getFuncYamlHandler(projectDir);
+  const useThinDockerfile = !!jarPath;
 
   return {
     functionName,
@@ -251,6 +254,7 @@ function discoverFromFuncYamlAndTarget(): { functionName?: string; functionAppNa
     dockerContextPath: path.resolve(projectDir),
     imageTag: imageTag || undefined,
     handler: handler || undefined,
+    useThinDockerfile,
   };
 }
 
@@ -309,6 +313,7 @@ export async function getOciConfig(): Promise<OciConfig> {
   }
 
   const handler = process.env.OCI_FUNCTION_HANDLER?.trim() || discovered.handler;
+  const useThinDockerfile = discovered.useThinDockerfile ?? false;
 
   return {
     compartmentId,
@@ -322,6 +327,7 @@ export async function getOciConfig(): Promise<OciConfig> {
     dockerContextPath: dockerContextPath || undefined,
     imageTag,
     handler: handler || undefined,
+    useThinDockerfile,
     ocirRepositoryName: process.env.OCI_OCIR_REPOSITORY_NAME || undefined,
     backend: backendConfig,
   };

@@ -11,6 +11,9 @@
  * - OCI_FUNCTION_NAME (Function name; default empty)
  * - OCI_FUNCTION_HANDLER (Java FDK CMD handler, e.g. com.example.Handler::handleRequest; from func.yaml cmd/handler if unset)
  * - OCI_FUNCTION_JAR_PATH (Path to JAR or project dir for function image; default empty)
+ * - OCI_FUNCTION_MEMORY_MB (function memory in MB; from func.yaml memory if unset)
+ * - OCI_FUNCTION_TIMEOUT_SECONDS (function timeout in seconds; from func.yaml timeout if unset)
+ * - OCI_FUNCTION_CONFIG (JSON object string for function config/env; merged with func.yaml config)
  * - OCDK_PROJECT_DIR (set by ocdk CLI to caller cwd; used to discover func.yaml and target/)
  * - OCI_STATE_BUCKET (for remote state)
  * - OCI_STATE_BACKEND_TYPE (oci|http|local)
@@ -56,6 +59,12 @@ export interface OciConfig {
   /** When true, deploy uses a thin Dockerfile (COPY target/*.jar only); full Maven build only in redeploy:function. */
   useThinDockerfile?: boolean;
   ocirRepositoryName?: string;
+  /** Function memory in MB (128, 256, 512, 1024, 2048, 3072). From func.yaml memory or OCI_FUNCTION_MEMORY_MB. */
+  functionMemoryMb?: string;
+  /** Function timeout in seconds (1–300). From func.yaml timeout or OCI_FUNCTION_TIMEOUT_SECONDS. */
+  functionTimeoutSeconds?: number;
+  /** Function config/env key-value. From func.yaml config or OCI_FUNCTION_CONFIG (JSON object string). */
+  functionConfig?: Record<string, string>;
   backend?: OciBackendConfig;
 }
 
@@ -142,6 +151,87 @@ function getFuncYamlVersion(projectDir: string): string | undefined {
   return undefined;
 }
 
+const VALID_MEMORY_MB = new Set([128, 256, 512, 1024, 2048, 3072]);
+
+/**
+ * Try to read memory (MB) from func.yaml. OCI allows 128, 256, 512, 1024, 2048, 3072.
+ * Returns the number if present and valid; otherwise undefined.
+ */
+function getFuncYamlMemory(projectDir: string): number | undefined {
+  const p = path.join(projectDir, 'func.yaml');
+  try {
+    if (fs.existsSync(p)) {
+      const content = fs.readFileSync(p, 'utf8');
+      const m = content.match(/^\s*memory:\s*(\d+)\s*$/m);
+      if (m) {
+        const n = parseInt(m[1], 10);
+        if (VALID_MEMORY_MB.has(n)) return n;
+      }
+    }
+  } catch {
+    // ignore
+  }
+  return undefined;
+}
+
+/**
+ * Try to read timeout (seconds) from func.yaml. OCI max is 300.
+ * Returns the number if present and in range 1–300; otherwise undefined.
+ */
+function getFuncYamlTimeout(projectDir: string): number | undefined {
+  const p = path.join(projectDir, 'func.yaml');
+  try {
+    if (fs.existsSync(p)) {
+      const content = fs.readFileSync(p, 'utf8');
+      const m = content.match(/^\s*timeout:\s*(\d+)\s*$/m);
+      if (m) {
+        const n = parseInt(m[1], 10);
+        if (n >= 1 && n <= 300) return n;
+      }
+    }
+  } catch {
+    // ignore
+  }
+  return undefined;
+}
+
+/**
+ * Try to read config (key-value env) from func.yaml. Expects a top-level "config:" block with key: value lines.
+ * Returns a record of string keys and string values; empty if none or parse error.
+ */
+function getFuncYamlConfig(projectDir: string): Record<string, string> | undefined {
+  const p = path.join(projectDir, 'func.yaml');
+  try {
+    if (!fs.existsSync(p)) return undefined;
+    const content = fs.readFileSync(p, 'utf8');
+    const lines = content.split(/\r?\n/);
+    let inConfig = false;
+    const config: Record<string, string> = {};
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (trimmed === 'config:' || /^config\s*:\s*$/.test(trimmed)) {
+        inConfig = true;
+        continue;
+      }
+      if (inConfig) {
+        if (trimmed !== '' && !line.startsWith(' ') && !line.startsWith('\t')) break;
+        const kv = line.match(/^\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*:\s*(.*)$/);
+        if (kv) {
+          const key = kv[1].trim();
+          let val = kv[2].trim();
+          if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'"))) {
+            val = val.slice(1, -1);
+          }
+          config[key] = val;
+        }
+      }
+    }
+    return Object.keys(config).length ? config : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 /** Read tenancy and region from OCI CLI config. Default file: ~/.oci/config, default profile: DEFAULT. */
 function readTenancyAndRegionFromCliConfig(): { tenancy?: string; region?: string } {
   const configPath = process.env.OCI_CONFIG_FILE || path.join(os.homedir(), '.oci', 'config');
@@ -220,7 +310,17 @@ function hasPomAndSrc(projectDir: string): boolean {
   }
 }
 
-function discoverFromFuncYamlAndTarget(): { functionName?: string; functionAppName?: string; dockerContextPath?: string; imageTag?: string; handler?: string; useThinDockerfile?: boolean } {
+function discoverFromFuncYamlAndTarget(): {
+  functionName?: string;
+  functionAppName?: string;
+  dockerContextPath?: string;
+  imageTag?: string;
+  handler?: string;
+  useThinDockerfile?: boolean;
+  memoryMb?: number;
+  timeoutSeconds?: number;
+  config?: Record<string, string>;
+} {
   let projectDir = process.env.OCDK_PROJECT_DIR?.trim();
   if (!projectDir) {
     try {
@@ -247,6 +347,9 @@ function discoverFromFuncYamlAndTarget(): { functionName?: string; functionAppNa
   const imageTag = process.env.OCI_IMAGE_TAG?.trim() || getFuncYamlVersion(projectDir);
   const handler = process.env.OCI_FUNCTION_HANDLER?.trim() || getFuncYamlHandler(projectDir);
   const useThinDockerfile = !!jarPath;
+  const memoryMb = getFuncYamlMemory(projectDir);
+  const timeoutSeconds = getFuncYamlTimeout(projectDir);
+  const config = getFuncYamlConfig(projectDir);
 
   return {
     functionName,
@@ -255,6 +358,9 @@ function discoverFromFuncYamlAndTarget(): { functionName?: string; functionAppNa
     imageTag: imageTag || undefined,
     handler: handler || undefined,
     useThinDockerfile,
+    memoryMb,
+    timeoutSeconds,
+    config,
   };
 }
 
@@ -315,6 +421,28 @@ export async function getOciConfig(): Promise<OciConfig> {
   const handler = process.env.OCI_FUNCTION_HANDLER?.trim() || discovered.handler;
   const useThinDockerfile = discovered.useThinDockerfile ?? false;
 
+  const memoryEnv = process.env.OCI_FUNCTION_MEMORY_MB?.trim();
+  const functionMemoryMb = memoryEnv
+    ? String(parseInt(memoryEnv, 10))
+    : (discovered.memoryMb != null ? String(discovered.memoryMb) : undefined);
+
+  const timeoutEnv = process.env.OCI_FUNCTION_TIMEOUT_SECONDS?.trim();
+  const functionTimeoutSeconds = timeoutEnv
+    ? parseInt(timeoutEnv, 10)
+    : discovered.timeoutSeconds;
+
+  let functionConfig = discovered.config;
+  const configEnv = process.env.OCI_FUNCTION_CONFIG?.trim();
+  if (configEnv) {
+    try {
+      const parsed = JSON.parse(configEnv) as Record<string, string>;
+      functionConfig = { ...functionConfig, ...parsed };
+    } catch {
+      // ignore invalid JSON
+    }
+  }
+  if (functionConfig && Object.keys(functionConfig).length === 0) functionConfig = undefined;
+
   return {
     compartmentId,
     ocirCompartmentId: ocirCompartmentId || undefined,
@@ -329,6 +457,9 @@ export async function getOciConfig(): Promise<OciConfig> {
     handler: handler || undefined,
     useThinDockerfile,
     ocirRepositoryName: process.env.OCI_OCIR_REPOSITORY_NAME || undefined,
+    functionMemoryMb: functionMemoryMb || undefined,
+    functionTimeoutSeconds: functionTimeoutSeconds ?? undefined,
+    functionConfig,
     backend: backendConfig,
   };
 }

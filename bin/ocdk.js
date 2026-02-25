@@ -43,15 +43,16 @@ Examples:
 // redeploy:function: run project script if present, else default (docker build + push from cwd)
 if (command === 'redeploy:function') {
   const cwd = process.cwd();
-  let hasScript = false;
+  let useProjectScript = false;
   try {
     const pkgPath = path.join(cwd, 'package.json');
     if (fs.existsSync(pkgPath)) {
       const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
-      hasScript = pkg.scripts && typeof pkg.scripts['redeploy:function'] === 'string';
+      const script = pkg.scripts && pkg.scripts['redeploy:function'];
+      useProjectScript = typeof script === 'string' && script.length > 0;
     }
   } catch (e) {}
-  if (hasScript) {
+  if (useProjectScript) {
     const result = spawnSync('npm', ['run', 'redeploy:function', '--', ...args.slice(1)], {
       stdio: 'inherit',
       cwd,
@@ -61,6 +62,10 @@ if (command === 'redeploy:function') {
     process.exit(result.status ?? 1);
   }
   const defaultScript = path.join(root, 'bin', 'redeploy-function.js');
+  if (!fs.existsSync(defaultScript)) {
+    console.error('Missing script: "redeploy:function". Add it to your package.json or update @mikarinneoracle/oci-cdk (npm update @mikarinneoracle/oci-cdk).');
+    process.exit(1);
+  }
   const result = spawnSync('node', [defaultScript, ...args.slice(1)], {
     stdio: 'inherit',
     cwd,

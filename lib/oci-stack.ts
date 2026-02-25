@@ -43,6 +43,12 @@ export interface OciStackConfig {
   apiGwRoutePath?: string;
   /** API Gateway route methods. Default ['GET', 'POST', 'OPTIONS']. */
   apiGwMethods?: string[];
+  /** Function memory in MB (e.g. '256'). From func.yaml or OCI_FUNCTION_MEMORY_MB. */
+  functionMemoryMb?: string;
+  /** Function timeout in seconds. From func.yaml or OCI_FUNCTION_TIMEOUT_SECONDS. */
+  functionTimeoutSeconds?: number;
+  /** Function config/env key-value. From func.yaml config or OCI_FUNCTION_CONFIG. */
+  functionConfig?: Record<string, string>;
   backend?: OciBackendConfig;
 }
 
@@ -275,20 +281,26 @@ CMD ["${handler.replace(/"/g, '\\"')}"]
         applicationId: functionApp.id,
         displayName: config.functionName!,
         image: imageUrl,
-        memoryInMbs: '256',
-        timeoutInSeconds: 30,
+        memoryInMbs: config.functionMemoryMb ?? '256',
+        timeoutInSeconds: config.functionTimeoutSeconds ?? 30,
+        ...(config.functionConfig && Object.keys(config.functionConfig).length > 0 ? { config: config.functionConfig } : {}),
       });
       ociFunction.addOverride('depends_on', [`null_resource.${buildAndPushImageId}`]);
       const pathPrefix = config.apiGwPathPrefix ?? '/';
       const routePath = config.apiGwRoutePath ?? '/{path*}';
       const methods = config.apiGwMethods?.length ? config.apiGwMethods : ['GET', 'POST', 'OPTIONS'];
+      const routeBackend = {
+        type: 'ORACLE_FUNCTIONS_BACKEND',
+        functionId: ociFunction.id,
+        readTimeoutInSeconds: config.functionTimeoutSeconds ?? 30,
+      };
       const apiDeployment = new ApigatewayDeployment(this, 'ApiDeployment', {
         compartmentId: config.compartmentId,
         gatewayId: apiGateway.id,
         pathPrefix,
         displayName: `${resourceName}-deployment`,
         specification: {
-          routes: [{ path: routePath, methods, backend: { type: 'ORACLE_FUNCTIONS_BACKEND', functionId: ociFunction.id } }],
+          routes: [{ path: routePath, methods, backend: routeBackend }],
         },
       });
       apiDeployment.node.addDependency(ociFunction);

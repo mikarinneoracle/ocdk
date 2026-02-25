@@ -21,11 +21,9 @@ npx ocdk deploy
 npx ocdk diff
 npx ocdk destroy
 npx ocdk get    # Regenerate provider bindings (use this, not `npx cdktf get`, so it runs in the package that has cdktf.json)
-npx ocdk redeploy:function   # Rebuild image (full Dockerfile), push, update function (requires a "redeploy:function" script in your project's package.json)
 ```
 
 - **Use `npx ocdk get`**, not `npx cdktf get`, when you need to regenerate provider bindings.
-- **`npx ocdk redeploy:function`** runs `npm run redeploy:function` in your project directory. Add a script to your `package.json`, e.g. one that builds the image with your full Dockerfile, pushes to OCIR, and updates the function (e.g. via `oci fn function update` or a second `terraform apply`). `cdktf get` must run in the directory that contains `cdktf.json` (the ocdk package); otherwise you may see "argument missing: language".
 - **Do not** run `npm run deploy` from `node_modules/@mikarinneoracle` (the scope folder). The package with the scripts is **`node_modules/@mikarinneoracle/oci-cdk`**. If you want to use npm scripts from inside the package: `cd node_modules/@mikarinneoracle/oci-cdk && npm run deploy`.
 - The **`ocdk`** command is provided by the package’s `bin`; use **`npx ocdk`** from your project root so npm finds it in `node_modules/.bin/ocdk`.
 
@@ -110,37 +108,77 @@ export OCI_OCIR_REPOSITORY_NAME="your-function-name"
 
 **Note**: The OCIR repository will be created in the specified compartment. Root compartment is not allowed and will cause an error.
 
+#### Function settings (func.yaml and env)
+
+Function memory, timeout, and config (env vars for the function) can be set in **func.yaml** and optionally overridden by environment variables:
+
+| Setting | func.yaml | Env override | Description |
+|--------|-----------|--------------|-------------|
+| Memory (MB) | `memory: 256` | `OCI_FUNCTION_MEMORY_MB` | Allowed: 128, 256, 512, 1024, 2048, 3072. Default 256. |
+| Timeout (s) | `timeout: 30` | `OCI_FUNCTION_TIMEOUT_SECONDS` | 1–300. Default 30. |
+| Config (env) | `config:` block (key/value) | `OCI_FUNCTION_CONFIG` | JSON object string, e.g. `{"KEY":"value"}`. Merged with func.yaml config. |
+
+Example **func.yaml**:
+
+```yaml
+name: my-function
+version: 0.0.1
+memory: 512
+timeout: 60
+config:
+  LOG_LEVEL: info
+  MY_VAR: value
+```
+
+API Gateway uses the same timeout as the function (from func.yaml or `OCI_FUNCTION_TIMEOUT_SECONDS`) when routing requests to the function.
+
 #### Terraform State Backend
 
-By default, Terraform state is stored locally. To use OCI Object Storage for remote state:
+By default, Terraform state is stored locally. Configure remote state with these environment variables:
 
-**Option 1: OCI Native Backend (Recommended)**
+| Env | Description |
+|-----|-------------|
+| `OCI_STATE_BACKEND_TYPE` | `local` (default), `oci`, or `http` |
+| `OCI_STATE_BUCKET` | Bucket name (for `oci` backend) |
+| `OCI_STATE_KEY` | Object key/path for the state file (for `oci` backend) |
+| `OCI_STATE_HTTP_ADDRESS` | Full URL to state object (for `http` backend; can be a PAR URL) |
+| `OCI_STATE_HTTP_UPDATE_METHOD` | `PUT` (for `http` backend) |
+| `OCI_STATE_HTTP_LOCK_ADDRESS` | Optional lock endpoint URL |
+| `OCI_STATE_HTTP_UNLOCK_ADDRESS` | Optional unlock endpoint URL |
+
+**Option 1: OCI Native Backend (bucket in your compartment)**
+
+Uses OCI Object Storage with your CLI/config credentials. State is stored at `namespace/bucket/key`.
+
 ```bash
 export OCI_STATE_BACKEND_TYPE="oci"
 export OCI_STATE_BUCKET="tf-state"
 export OCI_STATE_KEY="oci-stack/terraform.tfstate"
+# OCI_NAMESPACE and region from your OCI config / env
 ```
 
-**Option 2: HTTP Backend (for OCI Object Storage via REST API)**
+**Option 2: HTTP Backend (bucket or PAR)**
+
+Use when you want to store state via REST (e.g. in a different tenancy or with a Pre-Authenticated Request). You can use a **PAR** (Pre-Authenticated Request) URL for the state object so Terraform does not need OCI config.
+
+- **Bucket + object path:** use the Object Storage REST URL for the state file.
+- **PAR for the state object:** create a PAR for the object (read/write) and set `OCI_STATE_HTTP_ADDRESS` to the PAR URL.
+
 ```bash
 export OCI_STATE_BACKEND_TYPE="http"
-export OCI_STATE_HTTP_ADDRESS="https://objectstorage.eu-amsterdam-1.oraclecloud.com/p/q-9i-3q__W7.....MYpacQ/n/frsxwtjslf35/b/tf-state/o/"
+# Example: PAR URL for the state object (create PAR in OCI Console for your bucket/object)
+export OCI_STATE_HTTP_ADDRESS="https://objectstorage.eu-frankfurt-1.oraclecloud.com/p/xxxxxxxxxxxxx/n/your-namespace/b/tf-state/o/terraform.tfstate"
 export OCI_STATE_HTTP_UPDATE_METHOD="PUT"
 ```
 
-**Option 3: Local State (Default)**
+**Option 3: Local State (default)**
+
 ```bash
 export OCI_STATE_BACKEND_TYPE="local"
-# or simply don't set OCI_STATE_BACKEND_TYPE
+# or omit OCI_STATE_BACKEND_TYPE
 ```
 
-**Note**: For OCI backend, ensure your OCI user has the following IAM permissions on the bucket:
-- `OBJECT_READ`
-- `OBJECT_CREATE`
-- `OBJECT_DELETE`
-- `OBJECT_INSPECT`
-
-For detailed backend configuration instructions, see [BACKEND_CONFIG.md](BACKEND_CONFIG.md).
+**IAM (OCI backend):** For `oci` backend, the principal (user or instance) needs on the bucket: `OBJECT_READ`, `OBJECT_CREATE`, `OBJECT_DELETE`, `OBJECT_INSPECT`.
 
 ### Deploy
 
@@ -181,7 +219,6 @@ CDK-style commands (same as AWS CDK):
 **Other:**
 - `npm run build` – Compile TypeScript
 - `npm run watch` – Watch mode for TypeScript
-- `npm run redeploy:function` – Redeploy function code to OCI only (no Terraform; requires a `redeploy:function` script in your project, e.g. calling OCI CLI)
 - `npm run cdktf -- <args>` – Pass through to cdktf (e.g. `npm run cdktf -- output`)
 
 ## Structure

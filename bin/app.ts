@@ -22,6 +22,9 @@ import { getOciConfig } from '../config/oci-config';
     handler: ociConfig.handler,
     useThinDockerfile: ociConfig.useThinDockerfile,
     ocirRepositoryName: ociConfig.ocirRepositoryName,
+    functionMemoryMb: ociConfig.functionMemoryMb,
+    functionTimeoutSeconds: ociConfig.functionTimeoutSeconds,
+    functionConfig: ociConfig.functionConfig,
     backend: ociConfig.backend,
   });
 

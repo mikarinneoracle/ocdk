@@ -132,6 +132,10 @@ config:
 
 API Gateway uses the same timeout as the function (from func.yaml or `OCI_FUNCTION_TIMEOUT_SECONDS`) when routing requests to the function.
 
+**API Gateway deployment spec:** Routes are read from a JSON file so you can edit them. By default the file `oci_apigateway_deployment.json` is created in your project root (like the Dockerfile) if it doesn’t exist. Override the path with `OCI_APIGATEWAY_DEPLOYMENT_JSON`. In the JSON, use `"functionId": "${function_id}"` in a route backend so the stack substitutes the deployed function’s OCID.
+
+**Function logs:** A script `tail-function-logs.js` is generated in your project root (if missing). After deploy, the stack writes `.ocdk-outputs.json` there. Run `OCI_COMPARTMENT_ID=... node tail-function-logs.js` (or `npx oci-cdk-test tail:execution-log`) to tail the last 10 minutes of Functions invocation logs. Requires OCI CLI.
+
 #### Terraform State Backend
 
 By default, Terraform state is stored locally. Configure remote state with these environment variables:

@@ -75,6 +75,22 @@ if (command === 'redeploy:function') {
   process.exit(result.status ?? 1);
 }
 
+// tail:execution-log – show recent API Gateway execution log entries for the deployed stack
+if (command === 'tail:execution-log') {
+  const script = path.join(root, 'bin', 'tail-execution-log.js');
+  if (!fs.existsSync(script)) {
+    console.error('Missing script: "tail:execution-log". Update @mikarinneoracle/oci-cdk (npm update @mikarinneoracle/oci-cdk).');
+    process.exit(1);
+  }
+  const result = spawnSync('node', [script, ...args.slice(1)], {
+    stdio: 'inherit',
+    cwd: root,
+    shell: true,
+    env: process.env,
+  });
+  process.exit(result.status ?? 1);
+}
+
 // Use npm run <command> so we use project's cdktf without requiring global CLI
 // Pass caller's cwd so the stack can find func.yaml and target/ in a Java project (env + file fallback)
 if (npmRunCommands.includes(command)) {

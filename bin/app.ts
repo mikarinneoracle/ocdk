@@ -25,6 +25,7 @@ import { getOciConfig } from '../config/oci-config';
     functionMemoryMb: ociConfig.functionMemoryMb,
     functionTimeoutSeconds: ociConfig.functionTimeoutSeconds,
     functionConfig: ociConfig.functionConfig,
+    apiGwDeploymentJsonPath: ociConfig.apiGwDeploymentJsonPath,
     backend: ociConfig.backend,
   });
 

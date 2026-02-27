@@ -14,6 +14,7 @@
  * - OCI_FUNCTION_MEMORY_MB (function memory in MB; from func.yaml memory if unset)
  * - OCI_FUNCTION_TIMEOUT_SECONDS (function timeout in seconds; from func.yaml timeout if unset)
  * - OCI_FUNCTION_CONFIG (JSON object string for function config/env; merged with func.yaml config)
+ * - OCI_APIGATEWAY_DEPLOYMENT_JSON (path to API Gateway deployment spec JSON; default project root oci_apigateway_deployment.json)
  * - OCDK_PROJECT_DIR (set by ocdk CLI to caller cwd; used to discover func.yaml and target/)
  * - OCI_STATE_BUCKET (for remote state)
  * - OCI_STATE_BACKEND_TYPE (oci|http|local)
@@ -57,6 +58,8 @@ export interface OciConfig {
     functionTimeoutSeconds?: number;
     /** Function config/env key-value. From func.yaml config or OCI_FUNCTION_CONFIG (JSON object string). */
     functionConfig?: Record<string, string>;
+    /** Path to API Gateway deployment spec JSON (routes). Use OCI_APIGATEWAY_DEPLOYMENT_JSON or default oci_apigateway_deployment.json in project root. */
+    apiGwDeploymentJsonPath?: string;
     backend?: OciBackendConfig;
 }
 /** OCIR short region keys (e.g. eu-frankfurt-1 -> fra). Used so login, build, push and function image all use same registry host. */

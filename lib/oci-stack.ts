@@ -13,7 +13,10 @@ import { ApigatewayGateway } from '../.gen/providers/oci/apigateway-gateway';
 import { ApigatewayDeployment } from '../.gen/providers/oci/apigateway-deployment';
 import { FunctionsApplication } from '../.gen/providers/oci/functions-application';
 import { FunctionsFunction } from '../.gen/providers/oci/functions-function';
+import { LoggingLogGroup } from '../.gen/providers/oci/logging-log-group';
+import { LoggingLog } from '../.gen/providers/oci/logging-log';
 import { OciBackendConfig, ocirHostKey, getOciImageUrl } from '../config/oci-config';
+import * as fs from 'fs';
 import * as path from 'path';
 
 export interface OciStackConfig {
@@ -49,6 +52,8 @@ export interface OciStackConfig {
   functionTimeoutSeconds?: number;
   /** Function config/env key-value. From func.yaml config or OCI_FUNCTION_CONFIG. */
   functionConfig?: Record<string, string>;
+  /** Path to API Gateway deployment spec JSON (routes). Default oci_apigateway_deployment.json in project root. */
+  apiGwDeploymentJsonPath?: string;
   backend?: OciBackendConfig;
 }
 
@@ -169,6 +174,9 @@ CMD ["${handler.replace(/"/g, '\\"')}"]
 .idea
 .vscode
 *.log
+oci_apigateway_deployment.json
+.ocdk-outputs.json
+tail-function-logs.js
 `;
       const dockerfileB64 = Buffer.from(dockerfileContent, 'utf8').toString('base64');
       const dockerignoreB64 = Buffer.from(dockerignoreContent, 'utf8').toString('base64');
@@ -272,6 +280,11 @@ CMD ["${handler.replace(/"/g, '\\"')}"]
         endpointType: 'PUBLIC',
         displayName: `${resourceName}-api-gateway`,
       });
+      const logGroup = new LoggingLogGroup(this, 'LogGroup', {
+        compartmentId: config.compartmentId,
+        displayName: appName,
+        description: `Log group for ${appName}`,
+      });
       const functionApp = new FunctionsApplication(this, 'FunctionApp', {
         compartmentId: config.compartmentId,
         displayName: appName,
@@ -287,28 +300,97 @@ CMD ["${handler.replace(/"/g, '\\"')}"]
       });
       ociFunction.addOverride('depends_on', [`null_resource.${buildAndPushImageId}`]);
       const pathPrefix = config.apiGwPathPrefix ?? '/';
-      const routePath = config.apiGwRoutePath ?? '/{path*}';
-      const methods = config.apiGwMethods?.length ? config.apiGwMethods : ['GET', 'POST', 'OPTIONS'];
-      const routeBackend = {
-        type: 'ORACLE_FUNCTIONS_BACKEND',
-        functionId: ociFunction.id,
-        readTimeoutInSeconds: config.functionTimeoutSeconds ?? 30,
-      };
+      let routes: Array<{ path: string; methods: string[]; backend: { type: string; functionId: typeof ociFunction.id; readTimeoutInSeconds?: number } }>;
+      if (config.apiGwDeploymentJsonPath && fs.existsSync(config.apiGwDeploymentJsonPath)) {
+        const raw = fs.readFileSync(config.apiGwDeploymentJsonPath, 'utf8');
+        const spec = JSON.parse(raw) as { routes?: Array<{ path?: string; methods?: string[]; backend?: Record<string, unknown> }> };
+        const routeList = spec?.routes ?? [];
+        routes = routeList.map((r) => {
+          const b = r.backend ?? {};
+          const functionIdRaw = (b.functionId ?? b.function_id) as string | undefined;
+          const functionId = typeof functionIdRaw === 'string' && functionIdRaw.includes('${function_id}')
+            ? ociFunction.id
+            : (functionIdRaw ?? ociFunction.id);
+          const readTimeout = (b.readTimeoutInSeconds ?? b.read_timeout_in_seconds) as number | undefined;
+          return {
+            path: r.path ?? '/{path*}',
+            methods: Array.isArray(r.methods) ? r.methods : ['GET', 'POST', 'OPTIONS'],
+            backend: {
+              type: (b.type as string) ?? 'ORACLE_FUNCTIONS_BACKEND',
+              functionId,
+              ...(readTimeout != null ? { readTimeoutInSeconds: readTimeout } : {}),
+            },
+          };
+        });
+      } else {
+        const routePath = config.apiGwRoutePath ?? '/{path*}';
+        const methods = config.apiGwMethods?.length ? config.apiGwMethods : ['GET', 'POST', 'OPTIONS'];
+        routes = [
+          {
+            path: routePath,
+            methods,
+            backend: {
+              type: 'ORACLE_FUNCTIONS_BACKEND',
+              functionId: ociFunction.id,
+              readTimeoutInSeconds: config.functionTimeoutSeconds ?? 30,
+            },
+          },
+        ];
+      }
       const apiDeployment = new ApigatewayDeployment(this, 'ApiDeployment', {
         compartmentId: config.compartmentId,
         gatewayId: apiGateway.id,
         pathPrefix,
         displayName: `${resourceName}-deployment`,
         specification: {
-          routes: [{ path: routePath, methods, backend: routeBackend }],
+          routes,
         },
       });
       apiDeployment.node.addDependency(ociFunction);
+
+      // Functions execution log: SERVICE log for the Functions application (category invoke)
+      const executionLog = new LoggingLog(this, 'ExecutionLog', {
+        displayName: `${appName}-invoke`,
+        logGroupId: logGroup.id,
+        logType: 'SERVICE',
+        configuration: {
+          compartmentId: config.compartmentId,
+          source: {
+            category: 'invoke',
+            // Associate this service log with the Functions application
+            resource: functionApp.id,
+            service: 'functions',
+            sourceType: 'OCISERVICE',
+          },
+        },
+      });
+      executionLog.node.addDependency(functionApp);
+
+      // Bake the default log IDs into the generated tail-function-logs.js script for convenience.
+      const writeOutputsId = 'WriteOutputsToProject';
+      this.addOverride(`resource.null_resource.${writeOutputsId}.triggers`, { execution_log_id: executionLog.id });
+      this.addOverride(`resource.null_resource.${writeOutputsId}.depends_on`, ['oci_logging_log.ExecutionLog']);
+      this.addOverride(`resource.null_resource.${writeOutputsId}.provisioner`, [
+        {
+          'local-exec': {
+            command:
+              'if [ -n "$OCDK_PROJECT_DIR" ]; then ' +
+              'LOG_GROUP_ID="$(terraform output -raw log_group_id 2>/dev/null || echo "")"; ' +
+              'EXEC_LOG_ID="$(terraform output -raw execution_log_id 2>/dev/null || echo "")"; ' +
+              'if [ -n "$LOG_GROUP_ID" ] && [ -n "$EXEC_LOG_ID" ]; then ' +
+              'printf \'{\"log_group_id\":\"%s\",\"execution_log_id\":\"%s\"}\\n\' \"$LOG_GROUP_ID\" \"$EXEC_LOG_ID\" > \"$OCDK_PROJECT_DIR/.ocdk-logs.json\"; ' +
+              'fi; ' +
+              'fi',
+          },
+        },
+      ]);
 
       new TerraformOutput(this, 'ocir_repository_name', { value: ocirRepository.displayName, description: 'OCIR repository name' });
       new TerraformOutput(this, 'api_gateway_host', { value: apiGateway.hostname, description: 'API Gateway hostname' });
       new TerraformOutput(this, 'function_invoke_url', { value: `https://${apiGateway.hostname}`, description: 'Base URL to invoke the function' });
       new TerraformOutput(this, 'function_id', { value: ociFunction.id, description: 'OCI Function OCID' });
+      new TerraformOutput(this, 'log_group_id', { value: logGroup.id, description: 'OCI Log Group OCID for the application' });
+      new TerraformOutput(this, 'execution_log_id', { value: executionLog.id, description: 'OCI Functions execution log OCID' });
     }
 
     // Force oracle/oci (Terraform Registry) so terraform init uses it on OL8 and elsewhere; must run after provider is added

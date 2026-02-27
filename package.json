@@ -44,6 +44,7 @@
     "lib",
     ".gen",
     "config",
+    "scripts",
     "cdktf.json",
     "ocdk.json"
   ],
@@ -55,6 +56,8 @@
     "cdktf-cli": "^0.21.0",
     "constructs": "^10.0.0",
     "oci-common": "^2.120.0",
+    "oci-logging": "^2.120.0",
+    "oci-loggingsearch": "^2.120.0",
     "oci-objectstorage": "^2.120.0"
   },
   "devDependencies": {

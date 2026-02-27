@@ -18,6 +18,7 @@ import { getOciConfig } from '../config/oci-config';
     functionName: ociConfig.functionName,
     functionJarPath: ociConfig.functionJarPath,
     dockerContextPath: ociConfig.dockerContextPath,
+    runtime: ociConfig.runtime,
     imageTag: ociConfig.imageTag,
     handler: ociConfig.handler,
     useThinDockerfile: ociConfig.useThinDockerfile,

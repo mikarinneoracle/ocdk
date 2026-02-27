@@ -54,6 +54,8 @@ export interface OciStackConfig {
   functionConfig?: Record<string, string>;
   /** Path to API Gateway deployment spec JSON (routes). Default oci_apigateway_deployment.json in project root. */
   apiGwDeploymentJsonPath?: string;
+  /** Runtime from func.yaml (e.g. 'java', 'python'); controls Dockerfile generation. */
+  runtime?: string;
   backend?: OciBackendConfig;
 }
 
@@ -149,12 +151,32 @@ export class OciStack extends TerraformStack {
         : `oci raw-request --region ${regionP} --http-method GET --target-uri "https://${ocirRegistry}/20180419/docker/token" 2>/dev/null | (command -v jq >/dev/null && jq -r .data.token || grep -o '"token":"[^"]*"' | cut -d'"' -f4) | docker login -u BEARER_TOKEN --password-stdin ${ocirRegistry} || (echo "Set OCI_AUTH_TOKEN or configure OCI CLI" >&2; exit 1)`;
       const handler = config.handler || 'com.example.fn.HelloFunction::handleRequest';
       const useThin = config.useThinDockerfile === true;
-      const dockerfileContentThin = `FROM fnproject/fn-java-fdk:jre17-1.1.5
+      const runtime = config.runtime?.toLowerCase();
+      let dockerfileContent: string;
+      if (runtime && runtime.startsWith('python')) {
+        dockerfileContent = `FROM fnproject/python:3.11-dev as build-stage
+WORKDIR /function
+ADD requirements.txt /function/
+RUN pip3 install --target /python/ --no-cache --no-cache-dir -r requirements.txt && \\
+    rm -fr ~/.cache/pip /tmp* requirements.txt func.yaml Dockerfile .venv && \\
+    chmod -R o+r /python
+ADD . /function/
+RUN rm -fr /function/.pip_cache
+FROM fnproject/python:3.11
+WORKDIR /function
+COPY --from=build-stage /python /python
+COPY --from=build-stage /function /function
+RUN chmod -R o+r /function
+ENV PYTHONPATH=/function:/python
+ENTRYPOINT ["/python/bin/fdk", "/function/func.py", "handler"]
+`;
+      } else {
+        const dockerfileContentThin = `FROM fnproject/fn-java-fdk:jre17-1.1.5
 WORKDIR /function
 COPY target/*.jar /function/app/
 CMD ["${handler.replace(/"/g, '\\"')}"]
 `;
-      const dockerfileContentFull = `FROM fnproject/fn-java-fdk-build:jdk17-1.1.5 as build-stage
+        const dockerfileContentFull = `FROM fnproject/fn-java-fdk-build:jdk17-1.1.5 as build-stage
 WORKDIR /function
 ENV MAVEN_OPTS -Dhttp.proxyHost= -Dhttp.proxyPort= -Dhttps.proxyHost= -Dhttps.proxyPort= -Dhttp.nonProxyHosts= -Dmaven.repo.local=/usr/share/maven/ref/repository
 ADD pom.xml /function/pom.xml
@@ -166,7 +188,8 @@ WORKDIR /function
 COPY --from=build-stage /function/target/*.jar /function/app/
 CMD ["${handler.replace(/"/g, '\\"')}"]
 `;
-      const dockerfileContent = useThin ? dockerfileContentThin : dockerfileContentFull;
+        dockerfileContent = useThin ? dockerfileContentThin : dockerfileContentFull;
+      }
       const dockerignoreContent = `node_modules
 .git
 *.md
@@ -366,19 +389,27 @@ tail-function-logs.js
       });
       executionLog.node.addDependency(functionApp);
 
-      // Bake the default log IDs into the generated tail-function-logs.js script for convenience.
+      // Write .ocdk-logs.json and tail-function-logs.js into project root. Use project dir from config (synth time) so we don't rely on OCDK_PROJECT_DIR at apply time.
+      const projectDir = config.dockerContextPath ? path.resolve(config.dockerContextPath) : '';
+      const projectDirShell = projectDir ? "'" + projectDir.replace(/'/g, "'\\''") + "'" : '';
       const writeOutputsId = 'WriteOutputsToProject';
       this.addOverride(`resource.null_resource.${writeOutputsId}.triggers`, { execution_log_id: executionLog.id });
       this.addOverride(`resource.null_resource.${writeOutputsId}.depends_on`, ['oci_logging_log.ExecutionLog']);
+      const projVar = projectDirShell ? `PROJ_DIR=${projectDirShell}; ` : '';
+      const projRef = projectDirShell ? '$PROJ_DIR' : '$OCDK_PROJECT_DIR';
+      const projGuard = projectDirShell ? 'true' : '[ -n "$OCDK_PROJECT_DIR" ]';
       this.addOverride(`resource.null_resource.${writeOutputsId}.provisioner`, [
         {
           'local-exec': {
             command:
-              'if [ -n "$OCDK_PROJECT_DIR" ]; then ' +
+              projVar +
+              `if ${projGuard}; then ` +
               'LOG_GROUP_ID="$(terraform output -raw log_group_id 2>/dev/null || echo "")"; ' +
               'EXEC_LOG_ID="$(terraform output -raw execution_log_id 2>/dev/null || echo "")"; ' +
               'if [ -n "$LOG_GROUP_ID" ] && [ -n "$EXEC_LOG_ID" ]; then ' +
-              'printf \'{\"log_group_id\":\"%s\",\"execution_log_id\":\"%s\"}\\n\' \"$LOG_GROUP_ID\" \"$EXEC_LOG_ID\" > \"$OCDK_PROJECT_DIR/.ocdk-logs.json\"; ' +
+              `printf \\'{\\"log_group_id\\":\\"%s\\",\\"execution_log_id\\":\\"%s\\"}\\\\n\\' "$LOG_GROUP_ID" "$EXEC_LOG_ID" > "${projRef}/.ocdk-logs.json"; ` +
+              `TAIL_SCRIPT="${projRef}/node_modules/@mikarinneoracle/oci-cdk/scripts/tail-function-log.js"; ` +
+              `if [ -f "$TAIL_SCRIPT" ]; then cp "$TAIL_SCRIPT" "${projRef}/tail-function-logs.js"; else echo "ocdk: tail script not found at $TAIL_SCRIPT (install @mikarinneoracle/oci-cdk in the project)"; fi; ` +
               'fi; ' +
               'fi',
           },

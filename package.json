@@ -1,6 +1,6 @@
 {
   "name": "@mikarinneoracle/oci-cdk",
-  "version": "1.1.2",
+  "version": "1.1.7",
   "description": "OCI CDK stack for OCI Functions, API Gateway, and related infrastructure",
   "main": "lib/index.js",
   "bin": {
@@ -19,7 +19,7 @@
     "get": "cdktf get",
     "synth": "cdktf synth",
     "list": "cdktf list",
-    "prepublishOnly": "npm run get && npm run compile && npm run build && node -e \"var fs=require('fs'),path=require('path'),s='lib/config',d='config'; if(fs.existsSync(s)){if(!fs.existsSync(d))fs.mkdirSync(d,{recursive:true});fs.readdirSync(s).forEach(function(f){fs.copyFileSync(path.join(s,f),path.join(d,f));});}\""
+    "prepublishOnly": "npm run get && npm run compile && npm run build && node -e \"var fs=require('fs'),path=require('path'),s='config',d='lib/config'; if(fs.existsSync(s)){if(!fs.existsSync(d))fs.mkdirSync(d,{recursive:true});fs.readdirSync(s).forEach(function(f){fs.copyFileSync(path.join(s,f),path.join(d,f));});}\""
   },
   "keywords": [
     "oci",

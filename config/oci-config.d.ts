@@ -45,6 +45,8 @@ export interface OciConfig {
     functionJarPath?: string;
     /** Path to directory containing target/ (discovered; Dockerfile is generated in local-exec). */
     dockerContextPath?: string;
+    /** Runtime from func.yaml (e.g. 'java', 'python'); controls Dockerfile generation. */
+    runtime?: string;
     /** Image tag for OCIR (from func.yaml version or OCI_IMAGE_TAG; default 'latest'). */
     imageTag?: string;
     /** Java FDK CMD handler (from func.yaml cmd/handler or OCI_FUNCTION_HANDLER; default below). */

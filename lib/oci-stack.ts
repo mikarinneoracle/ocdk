@@ -424,7 +424,8 @@ tail-function-logs.js
     // Force oracle/oci (Terraform Registry) so terraform init uses it on OL8 and elsewhere; must run after provider is added
     this.addOverride('terraform.required_providers.oci', {
       source: 'oracle/oci',
-      version: '>= 5.0.0, < 6.0.0',
+      // Pin to < 5.47.0: 5.47.0 crashes on darwin_arm64; 5.46.x and Linux (OL8) work
+      version: '>= 5.0.0, < 5.47.0',
     });
   }
 }

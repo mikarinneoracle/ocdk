@@ -148,9 +148,10 @@ async function pullLogsWithLogAndGroupId({
     debug('after filter by logid: entriesToProcess.length =', entriesToProcess.length);
   }
 
-  // Map each entry to a { timestamp, message } pair using data from the log.
+  // Map each entry to a { id?, timestamp, message } for dedupe and display.
   const lines = entriesToProcess.map(entry => {
     const logData = entry.data?.logContent || entry.logContent || entry;
+    const id = logData && logData.id ? String(logData.id).trim() : null;
 
     // Try to extract a timestamp from common locations in the OCI response.
     let ts =
@@ -180,7 +181,7 @@ async function pullLogsWithLogAndGroupId({
     else if (entry.content) message = entry.content;
     else message = JSON.stringify(logData, null, 2);
 
-    return { timestamp: String(ts), message: String(message) };
+    return { id, timestamp: String(ts), message: String(message).trim() };
   });
 
   return {
@@ -247,7 +248,7 @@ async function main() {
   debug('tail:', tail, 'intervalMs:', intervalMs);
   debug('auth: config', process.env.OCI_CONFIG_FILE || '~/.oci/config', 'profile:', process.env.OCI_CLI_PROFILE || process.env.OCI_CONFIG_PROFILE || 'DEFAULT');
 
-  // Keep track of which log lines we've already printed (by timestamp+message)
+  // Dedupe by OCI log entry id when present, else by timestamp|message.
   const seenKeys = new Set();
   let pollCount = 0;
 
@@ -268,8 +269,8 @@ async function main() {
 
       // Results are newest-first from the search query; print in chronological order.
       for (let i = lines.length - 1; i >= 0; i -= 1) {
-        const { timestamp, message } = lines[i];
-        const key = `${timestamp}|${message}`;
+        const { id, timestamp, message } = lines[i];
+        const key = id && id.length > 0 ? id : `${timestamp}|${message}`;
         if (seenKeys.has(key)) continue;
         seenKeys.add(key);
         console.log(`${timestamp} ${message}`);

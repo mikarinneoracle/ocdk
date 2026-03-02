@@ -145,11 +145,12 @@ async function main() {
         const data = item?.data || item;
         const logContent = data?.logContent || data;
         const inner = logContent?.data || logContent;
+        const id = logContent?.id ?? data?.id ?? null;
         let ts = logContent?.time ?? data?.datetime ?? data?.time;
         if (typeof ts === 'number') ts = new Date(ts).toISOString();
         else if (!ts) ts = new Date().toISOString();
-        const message = inner?.message ?? logContent?.message ?? '';
-        lines.push({ ts: String(ts), message: String(message) });
+        const message = (inner?.message ?? logContent?.message ?? '').trim();
+        lines.push({ id, ts: String(ts), message });
       }
       return lines;
     } catch (e) {
@@ -179,8 +180,8 @@ async function main() {
     if (debug && (pollCount === 1 || lines.length > 0)) {
       console.error('[oci-tail] poll #' + pollCount, 'lines:', lines.length, 'seen:', seenKeys.size);
     }
-    for (const { ts, message } of lines) {
-      const key = `${ts}|${message}`;
+    for (const { id, ts, message } of lines) {
+      const key = (id && String(id).trim()) || `${ts}|${message}`;
       if (seenKeys.has(key)) continue;
       seenKeys.add(key);
       console.log(`${ts} ${message}`);

@@ -36,9 +36,9 @@ Only **`OCI_COMPARTMENT_ID`** (or `OCI_COMPARTMENT_OCID`) is required for deploy
 | `OCI_APIGATEWAY_DEPLOYMENT_JSON` | Path to deployment spec JSON | `oci_apigateway_deployment.json` in project root |
 | **Stack / networking** | | |
 | `OCI_STACK_NAME` | Stack name | `oci-stack` |
-| `STACK_ACTION` | `function` = no API Gateway; `api-gateway` = full stack | `api-gateway` |
-| `PRIVATE_SUBNET_ID` or `PRIVATE_SUBNET_OCID` | Use existing private subnet for Function App | — |
-| `PUBLIC_SUBNET_ID` or `PUBLIC_SUBNET_OCID` | Use existing public subnet for API Gateway | — |
+| `OCI_STACK_ACTION` | `function` = no API Gateway; `api-gateway` = full stack | `api-gateway` |
+| `OCI_PRIVATE_SUBNET_ID` or `OCI_PRIVATE_SUBNET_OCID` | Use existing private subnet for Function App | — |
+| `OCI_PUBLIC_SUBNET_ID` or `OCI_PUBLIC_SUBNET_OCID` | Use existing public subnet for API Gateway | — |
 | **Terraform state** | | |
 | `OCI_STATE_BACKEND_TYPE` | Backend type | `local` |
 | `OCI_STATE_BUCKET` | Bucket name (for `oci` backend) | — |

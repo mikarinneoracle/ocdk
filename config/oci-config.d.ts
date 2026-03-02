@@ -15,11 +15,11 @@
  * - OCI_FUNCTION_TIMEOUT_SECONDS (function timeout in seconds; from func.yaml timeout if unset)
  * - OCI_FUNCTION_CONFIG (JSON object string for function config/env; merged with func.yaml config)
  * - OCI_APIGATEWAY_DEPLOYMENT_JSON (path to API Gateway deployment spec JSON; default project root oci_apigateway_deployment.json)
- * - OCDK_PROJECT_DIR (set by ocdk CLI to caller cwd; used to discover func.yaml and target/)
+ * - OCI_PROJECT_DIR (set by ocdk CLI to caller cwd; used to discover func.yaml and target/)
  * - OCI_STATE_BUCKET (for remote state)
  * - OCI_STATE_BACKEND_TYPE (oci|http|local)
  *
- * When OCDK_PROJECT_DIR is set (e.g. running `npx ocdk deploy` from a Java project), config
+ * When OCI_PROJECT_DIR is set (e.g. running `npx ocdk deploy` from a Java project), config
  * discovers either target/*.jar or pom.xml+src/ (and optionally func.yaml name, version, cmd/handler).
  * No Dockerfile is required—the stack generates one in local-exec (excluding node_modules via .dockerignore),
  * then builds, tags (from func.yaml version), and pushes to OCIR.

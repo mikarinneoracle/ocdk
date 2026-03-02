@@ -54,7 +54,7 @@ Only **`OCI_COMPARTMENT_ID`** (or `OCI_COMPARTMENT_OCID`) is required for deploy
 | `OCI_CONFIG_FILE` | OCI CLI config path | `~/.oci/config` |
 | `OCI_CLI_PROFILE` | OCI CLI profile | `DEFAULT` |
 | **Internal** | | |
-| `OCDK_PROJECT_DIR` | Set by `ocdk` CLI to caller cwd | — |
+| `OCI_PROJECT_DIR` | Set by `ocdk` CLI to caller cwd | — |
 
 ## npx commands
 
@@ -66,4 +66,4 @@ npx ocdk tail:execution-log
 ```
 
 - **`npx ocdk deploy`** – Deploy the stack. Options (e.g. `--auto-approve`) are passed through.
-- **`npx ocdk tail:execution-log`** – Tail function execution logs. Resolves log IDs from terraform output or `OCI_LOG_GROUP_ID` / `OCI_EXECUTION_LOG_ID`. Set **`OCI_TAIL_DEBUG=1`** to print debug info to stderr if you get no output. Requires **`OCI_COMPARTMENT_ID`** when run without a project `tail-function-logs.js`.
+- **`npx ocdk tail:execution-log`** – Tail function execution logs. Resolves log IDs from terraform output or `OCI_LOG_GROUP_ID` / `OCI_EXECUTION_LOG_ID`. Set **`OCI_TAIL_DEBUG=1`** to print debug info to stderr if you get no output. Requires **`OCI_COMPARTMENT_ID`** (or `OCI_COMPARTMENT_OCID`) when run without a project `tail-function-logs.js`.

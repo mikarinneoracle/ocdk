@@ -33,7 +33,7 @@ function extractJson(raw) {
 
 async function main() {
   const packageRoot = path.join(__dirname, '..');
-  const projectDir = process.env.OCDK_PROJECT_DIR || process.cwd();
+  const projectDir = process.env.OCI_PROJECT_DIR || process.cwd();
   const fs = require('fs');
 
   const compId = process.env.OCI_COMPARTMENT_ID || process.env.OCI_COMPARTMENT_OCID;

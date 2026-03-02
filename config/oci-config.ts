@@ -15,11 +15,11 @@
  * - OCI_FUNCTION_TIMEOUT_SECONDS (function timeout in seconds; from func.yaml timeout if unset)
  * - OCI_FUNCTION_CONFIG (JSON object string for function config/env; merged with func.yaml config)
  * - OCI_APIGATEWAY_DEPLOYMENT_JSON (path to API Gateway deployment spec JSON; default project root oci_apigateway_deployment.json)
- * - OCDK_PROJECT_DIR (set by ocdk CLI to caller cwd; used to discover func.yaml and target/)
+ * - OCI_PROJECT_DIR (set by ocdk CLI to caller cwd; used to discover func.yaml and target/)
  * - OCI_STATE_BUCKET (for remote state)
  * - OCI_STATE_BACKEND_TYPE (oci|http|local)
  *
- * When OCDK_PROJECT_DIR is set (e.g. running `npx ocdk deploy` from a Java project), config
+ * When OCI_PROJECT_DIR is set (e.g. running `npx ocdk deploy` from a Java project), config
  * discovers either target/*.jar or pom.xml+src/ (and optionally func.yaml name, version, cmd/handler).
  * No Dockerfile is required—the stack generates one in local-exec (excluding node_modules via .dockerignore),
  * then builds, tags (from func.yaml version), and pushes to OCIR.
@@ -273,9 +273,9 @@ function getFuncYamlConfig(projectDir: string): Record<string, string> | undefin
   }
 }
 
-/** Ensure oci_apigateway_deployment.json exists in projectDir; write default if missing. Skip when STACK_ACTION=function. Returns path. */
+/** Ensure oci_apigateway_deployment.json exists in projectDir; write default if missing. Skip when OCI_STACK_ACTION=function. Returns path. */
 function ensureDefaultApiGwDeploymentJson(projectDir: string): string {
-  if (process.env.STACK_ACTION?.trim().toLowerCase() === 'function') {
+  if ((process.env.OCI_STACK_ACTION || '').trim().toLowerCase() === 'function') {
     return path.join(projectDir, 'oci_apigateway_deployment.json'); // return path but do not create file
   }
   const p = path.join(projectDir, 'oci_apigateway_deployment.json');
@@ -307,7 +307,7 @@ const path = require('path');
 const fs = require('fs');
 const { spawnSync } = require('child_process');
 
-const dir = process.env.OCDK_PROJECT_DIR || __dirname;
+const dir = process.env.OCI_PROJECT_DIR || __dirname;
 const outputsPath = path.join(dir, '.ocdk-outputs.json');
 const compId = process.env.OCI_COMPARTMENT_ID || process.env.OCI_COMPARTMENT_OCID;
 if (!compId) {
@@ -465,7 +465,7 @@ function discoverFromFuncYamlAndTarget(): {
   timeoutSeconds?: number;
   config?: Record<string, string>;
 } {
-  let projectDir = process.env.OCDK_PROJECT_DIR?.trim();
+  let projectDir = process.env.OCI_PROJECT_DIR?.trim();
   if (!projectDir) {
     try {
       const p = path.join(process.cwd(), '.ocdk-project-dir');
@@ -534,7 +534,11 @@ const backendConfig: OciBackendConfig | undefined = backendType === 'local'
  */
 export async function getOciConfig(): Promise<OciConfig> {
   const cliConfig = readTenancyAndRegionFromCliConfig();
-  const compartmentId = process.env.OCI_COMPARTMENT_ID?.trim() || 'ocid1.compartment.oc1..aaaaaaa...';
+  const compartmentIdRaw = (process.env.OCI_COMPARTMENT_ID || process.env.OCI_COMPARTMENT_OCID || '').trim();
+  if (!compartmentIdRaw || compartmentIdRaw === 'ocid1.compartment.oc1..aaaaaaa...') {
+    throw new Error('OCI_COMPARTMENT_ID (or OCI_COMPARTMENT_OCID) is required.');
+  }
+  const compartmentId = compartmentIdRaw;
   const ocirCompartmentId = process.env.OCI_OCIR_COMPARTMENT_ID?.trim() || process.env.OCI_COMPARTMENT_ID?.trim() || compartmentId;
   const tenancyId = process.env.OCI_TENANCY_ID?.trim() || cliConfig.tenancy?.trim() || 'ocid1.tenancy.oc1..aaaaaaa...';
   const region = process.env.OCI_REGION?.trim() || cliConfig.region?.trim() || 'eu-frankfurt-1';
@@ -591,7 +595,17 @@ export async function getOciConfig(): Promise<OciConfig> {
   if (functionConfig && Object.keys(functionConfig).length === 0) functionConfig = undefined;
 
   const apiGwDeploymentJsonEnv = process.env.OCI_APIGATEWAY_DEPLOYMENT_JSON?.trim();
-  const stackAction = process.env.STACK_ACTION?.trim().toLowerCase();
+  const stackAction = (process.env.OCI_STACK_ACTION || '').trim().toLowerCase();
+  // api-gateway: when using existing subnets, both private and public must be set or neither. function: only private is optional.
+  if (stackAction !== 'function') {
+    const privateSubnetSet = !!(process.env.OCI_PRIVATE_SUBNET_ID || process.env.OCI_PRIVATE_SUBNET_OCID || '').trim();
+    const publicSubnetSet = !!(process.env.OCI_PUBLIC_SUBNET_ID || process.env.OCI_PUBLIC_SUBNET_OCID || '').trim();
+    if (privateSubnetSet !== publicSubnetSet) {
+      throw new Error(
+        'For OCI_STACK_ACTION=api-gateway, when using existing subnets both OCI_PRIVATE_SUBNET_ID and OCI_PUBLIC_SUBNET_ID (or OCID variants) must be set, or neither.'
+      );
+    }
+  }
   const apiGwDeploymentJsonPath = apiGwDeploymentJsonEnv
     ? path.resolve(apiGwDeploymentJsonEnv)
     : stackAction === 'function'

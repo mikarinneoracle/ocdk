@@ -2,7 +2,7 @@
 # Generate tail-function-logs.js in project root (IDs from terraform output). Run from Terraform local-exec.
 # Terraform runs with cwd = package root (e.g. .../project/node_modules/.../oci-cdk), not inside cdktf.out/stacks.
 # So we must find project root by walking up to a dir named node_modules; its parent is the project root.
-PROJ_DIR="${OCDK_PROJECT_DIR:-${PROJ_DIR}}"
+PROJ_DIR="${OCI_PROJECT_DIR:-${PROJ_DIR}}"
 if [ -z "$PROJ_DIR" ]; then
   # Walk up from cwd to find a dir named node_modules; its parent is the consumer project root.
   d="$(pwd)"

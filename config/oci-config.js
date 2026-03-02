@@ -16,11 +16,11 @@
  * - OCI_FUNCTION_TIMEOUT_SECONDS (function timeout in seconds; from func.yaml timeout if unset)
  * - OCI_FUNCTION_CONFIG (JSON object string for function config/env; merged with func.yaml config)
  * - OCI_APIGATEWAY_DEPLOYMENT_JSON (path to API Gateway deployment spec JSON; default project root oci_apigateway_deployment.json)
- * - OCDK_PROJECT_DIR (set by ocdk CLI to caller cwd; used to discover func.yaml and target/)
+ * - OCI_PROJECT_DIR (set by ocdk CLI to caller cwd; used to discover func.yaml and target/)
  * - OCI_STATE_BUCKET (for remote state)
  * - OCI_STATE_BACKEND_TYPE (oci|http|local)
  *
- * When OCDK_PROJECT_DIR is set (e.g. running `npx ocdk deploy` from a Java project), config
+ * When OCI_PROJECT_DIR is set (e.g. running `npx ocdk deploy` from a Java project), config
  * discovers either target/*.jar or pom.xml+src/ (and optionally func.yaml name, version, cmd/handler).
  * No Dockerfile is required—the stack generates one in local-exec (excluding node_modules via .dockerignore),
  * then builds, tags (from func.yaml version), and pushes to OCIR.
@@ -267,9 +267,9 @@ function getFuncYamlConfig(projectDir) {
         return undefined;
     }
 }
-/** Ensure oci_apigateway_deployment.json exists in projectDir; write default if missing. Skip when STACK_ACTION=function. Returns path. */
+/** Ensure oci_apigateway_deployment.json exists in projectDir; write default if missing. Skip when OCI_STACK_ACTION=function. Returns path. */
 function ensureDefaultApiGwDeploymentJson(projectDir) {
-    if (process.env.STACK_ACTION && process.env.STACK_ACTION.trim().toLowerCase() === 'function') {
+    if ((process.env.OCI_STACK_ACTION || '').trim().toLowerCase() === 'function') {
         return path.join(projectDir, 'oci_apigateway_deployment.json');
     }
     const p = path.join(projectDir, 'oci_apigateway_deployment.json');
@@ -299,7 +299,7 @@ const path = require('path');
 const fs = require('fs');
 const { spawnSync } = require('child_process');
 
-const dir = process.env.OCDK_PROJECT_DIR || __dirname;
+const dir = process.env.OCI_PROJECT_DIR || __dirname;
 const outputsPath = path.join(dir, '.ocdk-outputs.json');
 const compId = process.env.OCI_COMPARTMENT_ID || process.env.OCI_COMPARTMENT_OCID;
 if (!compId) {
@@ -453,7 +453,7 @@ function hasPomAndSrc(projectDir) {
     }
 }
 function discoverFromFuncYamlAndTarget() {
-    let projectDir = process.env.OCDK_PROJECT_DIR?.trim();
+    let projectDir = process.env.OCI_PROJECT_DIR?.trim();
     if (!projectDir) {
         try {
             const p = path.join(process.cwd(), '.ocdk-project-dir');
@@ -574,7 +574,7 @@ async function getOciConfig() {
     if (functionConfig && Object.keys(functionConfig).length === 0)
         functionConfig = undefined;
     const apiGwDeploymentJsonEnv = process.env.OCI_APIGATEWAY_DEPLOYMENT_JSON?.trim();
-    const stackAction = process.env.STACK_ACTION?.trim().toLowerCase();
+    const stackAction = (process.env.OCI_STACK_ACTION || '').trim().toLowerCase();
     const apiGwDeploymentJsonPath = apiGwDeploymentJsonEnv
         ? path.resolve(apiGwDeploymentJsonEnv)
         : stackAction === 'function'

@@ -58,7 +58,7 @@ So:
 
 - **At synth time** we can set `PROJ_DIR` in the provisioner env to `config.dockerContextPath` (resolved path). That path is the **machine that ran synth** (e.g. laptop).  
 - **Apply** often runs elsewhere (CI, another host). That path may not exist or be wrong, so the script must not rely on it when run on a different host.  
-- **OCDK_PROJECT_DIR** is set by `ocdk` when you run `npx ocdk deploy` from the project; it’s not set if someone runs `terraform apply` directly. So inference in the script is still needed.
+- **OCI_PROJECT_DIR** is set by `ocdk` when you run `npx ocdk deploy` from the project; it’s not set if someone runs `terraform apply` directly. So inference in the script is still needed.
 
 ## Summary
 

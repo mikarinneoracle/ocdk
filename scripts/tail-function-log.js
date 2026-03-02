@@ -42,7 +42,6 @@ async function pullLogsWithLogAndGroupId({
   const resolvedLogOcid =
     logOcid ||
     process.env.OCI_EXECUTION_LOG_ID ||
-    process.env.LOG_OCID ||
     DEFAULT_EXECUTION_LOG_ID;
 
   const resolvedLogGroupIdFromEnv =
@@ -50,14 +49,12 @@ async function pullLogsWithLogAndGroupId({
       ? logGroupIdFromQuery
       : (
           process.env.OCI_LOG_GROUP_ID ||
-          process.env.LOG_GROUP_OCID ||
-          process.env.LOG_GROUP_ID ||
           DEFAULT_LOG_GROUP_ID ||
           null
         );
 
   if (!resolvedLogOcid) {
-    throw new Error('logOcid is required (either parameter or OCI_EXECUTION_LOG_ID / LOG_OCID env var)');
+    throw new Error('logOcid is required (either parameter or OCI_EXECUTION_LOG_ID env var)');
   }
   if (!loggingManagementClient || !logSearchClient) {
     throw new Error('loggingManagementClient and logSearchClient are required');
@@ -222,12 +219,9 @@ async function main() {
 
   const effectiveExecutionLogId =
     process.env.OCI_EXECUTION_LOG_ID ||
-    process.env.LOG_OCID ||
     DEFAULT_EXECUTION_LOG_ID;
   const effectiveLogGroupId =
     process.env.OCI_LOG_GROUP_ID ||
-    process.env.LOG_GROUP_OCID ||
-    process.env.LOG_GROUP_ID ||
     DEFAULT_LOG_GROUP_ID;
 
   if (!effectiveExecutionLogId) {
@@ -238,7 +232,7 @@ async function main() {
   }
   if (!effectiveLogGroupId) {
     console.error(
-      'Missing log group OCID. Set OCI_LOG_GROUP_ID (or LOG_GROUP_OCID / LOG_GROUP_ID), or run "npx ocdk write-log-config" after deploy to inject IDs into tail-function-logs.js.'
+      'Missing log group OCID. Set OCI_LOG_GROUP_ID, or run "npx ocdk write-log-config" after deploy to inject IDs into tail-function-logs.js.'
     );
     process.exit(1);
   }

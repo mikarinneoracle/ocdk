@@ -88,7 +88,7 @@ if (command === 'tail:execution-log') {
 // Pass caller's cwd so the stack can find func.yaml and target/ in a Java project (env + file fallback)
 if (npmRunCommands.includes(command)) {
   const projectDir = process.cwd();
-  const env = { ...process.env, OCDK_PROJECT_DIR: projectDir };
+  const env = { ...process.env, OCI_PROJECT_DIR: projectDir };
   try {
     fs.writeFileSync(projectDirFile, projectDir, 'utf8');
   } catch (e) {

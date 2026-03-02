@@ -99,8 +99,9 @@ export class OciStack extends TerraformStack {
       tenancyOcid: config.tenancyId,
     });
 
-    // STACK_ACTION: "function" => VCN, subnet, OCIR, App, Function, log group, exec log; "api-gateway" (default) => all including API Gateway deployment.
-    const stackAction = process.env.STACK_ACTION?.trim().toLowerCase() === 'function' ? 'function' : 'api-gateway';
+    // OCI_STACK_ACTION: "function" => no API Gateway; "api-gateway" or unset => full stack including API Gateway.
+    const stackActionRaw = (process.env.OCI_STACK_ACTION || '').trim().toLowerCase();
+    const stackAction = stackActionRaw === 'function' ? 'function' : 'api-gateway';
 
     // OCIR Container Repository (root compartment allowed if explicitly set).
     const ocirCompartmentId = config.ocirCompartmentId || config.compartmentId;
@@ -128,8 +129,8 @@ export class OciStack extends TerraformStack {
       const appName = config.functionAppName || config.functionName!;
       const resourceName = appName;
 
-      const privateSubnetIdFromEnv = (process.env.PRIVATE_SUBNET_ID || process.env.PRIVATE_SUBNET_OCID || '').trim();
-      const publicSubnetIdFromEnv = (process.env.PUBLIC_SUBNET_ID || process.env.PUBLIC_SUBNET_OCID || '').trim();
+      const privateSubnetIdFromEnv = (process.env.OCI_PRIVATE_SUBNET_ID || process.env.OCI_PRIVATE_SUBNET_OCID || '').trim();
+      const publicSubnetIdFromEnv = (process.env.OCI_PUBLIC_SUBNET_ID || process.env.OCI_PUBLIC_SUBNET_OCID || '').trim();
 
       this.addOverride('terraform.required_providers.null', {
         source: 'hashicorp/null',
@@ -227,7 +228,11 @@ tail-function-logs.js
 
       let publicSubnet: CoreSubnet | undefined;
       let privateSubnet: CoreSubnet | undefined;
-      const createNetworking = !privateSubnetIdFromEnv || !publicSubnetIdFromEnv;
+      // Function-only: create VCN only when we need to create the private subnet. API Gateway: create when we need either subnet.
+      const createNetworking =
+        stackAction === 'function'
+          ? !privateSubnetIdFromEnv
+          : !privateSubnetIdFromEnv || !publicSubnetIdFromEnv;
       if (createNetworking) {
         const vcn = new CoreVcn(this, 'Vcn', {
           compartmentId: config.compartmentId,
@@ -235,7 +240,7 @@ tail-function-logs.js
           cidrBlocks: ['10.0.0.0/16'],
           dnsLabel: 'appfn',
         });
-        if (!publicSubnetIdFromEnv) {
+        if (stackAction === 'api-gateway' && !publicSubnetIdFromEnv) {
           publicSubnet = new CoreSubnet(this, 'PublicSubnet', {
             compartmentId: config.compartmentId,
             vcnId: vcn.id,

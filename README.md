@@ -49,8 +49,8 @@ Only **`OCI_COMPARTMENT_ID`** (or `OCI_COMPARTMENT_OCID`) is required for deploy
 | `OCI_STATE_HTTP_UNLOCK_ADDRESS` | Unlock endpoint URL | — |
 | **Log tail (tail-function-logs.js / tail:execution-log)** | | |
 | `OCI_COMPARTMENT_ID` or `OCI_COMPARTMENT_OCID` | Required for tail | — |
-| `OCI_LOG_GROUP_ID` | Log group OCID | `.ocdk-logs.json` after deploy |
-| `OCI_EXECUTION_LOG_ID` | Execution log OCID | `.ocdk-logs.json` after deploy |
+| `OCI_LOG_GROUP_ID` | Log group OCID | terraform output / `write-log-config` |
+| `OCI_EXECUTION_LOG_ID` | Execution log OCID | terraform output / `write-log-config` |
 | `OCI_CONFIG_FILE` | OCI CLI config path | `~/.oci/config` |
 | `OCI_CLI_PROFILE` | OCI CLI profile | `DEFAULT` |
 | **Internal** | | |
@@ -62,16 +62,8 @@ Run from your project root (where your `func.yaml` / function code and `node_mod
 
 ```bash
 npx ocdk deploy
-npx ocdk diff
-npx ocdk synth
-npx ocdk destroy
-npx ocdk list
-npx ocdk get
 npx ocdk tail:execution-log
 ```
 
-- **`npx ocdk get`** – Generate provider bindings (use this, not `npx cdktf get`).
-- **`npx ocdk tail:execution-log`** – Tail function execution logs. Resolves log IDs from terraform output, `.ocdk-logs.json`, or `OCI_LOG_GROUP_ID` / `OCI_EXECUTION_LOG_ID`. Set **`OCI_TAIL_DEBUG=1`** to print debug info to stderr if you get no output. Requires **`OCI_COMPARTMENT_ID`** when run without a project `tail-function-logs.js`.
-- **`npx ocdk write-log-config`** – Optional: write `.ocdk-logs.json` and `tail-function-logs.js` to project root from terraform output.
-
-Options (e.g. `--auto-approve`) are passed through: `npx ocdk deploy --auto-approve`.
+- **`npx ocdk deploy`** – Deploy the stack. Options (e.g. `--auto-approve`) are passed through.
+- **`npx ocdk tail:execution-log`** – Tail function execution logs. Resolves log IDs from terraform output or `OCI_LOG_GROUP_ID` / `OCI_EXECUTION_LOG_ID`. Set **`OCI_TAIL_DEBUG=1`** to print debug info to stderr if you get no output. Requires **`OCI_COMPARTMENT_ID`** when run without a project `tail-function-logs.js`.

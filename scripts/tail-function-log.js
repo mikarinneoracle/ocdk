@@ -15,53 +15,16 @@ function debug(...args) {
   }
 }
 
-// Defaults: in-code (set by npx ocdk write-log-config), or .ocdk-logs.json, or env vars. Placeholders become empty.
-// Resolve script dir so we find .ocdk-logs.json next to this script even when cwd is different (e.g. node subdir/tail-function-logs.js).
-const scriptDir = typeof __dirname !== 'undefined' ? __dirname : process.cwd();
+// Defaults: in-code (injected by npx ocdk write-log-config when writing tail-function-logs.js) or env vars. Placeholders become empty.
 let DEFAULT_EXECUTION_LOG_ID = '__EXECUTION_LOG_ID__';
 let DEFAULT_LOG_GROUP_ID = '__LOG_GROUP_ID__';
-
-// Prefer .ocdk-logs.json next to this script, then cwd
-const defaultsPath = path.join(scriptDir, '.ocdk-logs.json');
-const defaultsPathCwd = path.join(process.cwd(), '.ocdk-logs.json');
-const defaultsPathToUse = fs.existsSync(defaultsPath) ? defaultsPath : defaultsPathCwd;
 if (DEBUG) {
-  const initialExec = DEFAULT_EXECUTION_LOG_ID === '__EXECUTION_LOG_ID__' ? 'placeholder' : (DEFAULT_EXECUTION_LOG_ID ? 'set' : 'empty');
-  const initialGroup = DEFAULT_LOG_GROUP_ID === '__LOG_GROUP_ID__' ? 'placeholder' : (DEFAULT_LOG_GROUP_ID ? 'set' : 'empty');
-  debug('scriptDir:', scriptDir, 'cwd:', process.cwd());
-  debug('initial in-code defaults: execution_log=', initialExec, 'log_group=', initialGroup);
-  debug('.ocdk-logs.json (script dir) exists?', fs.existsSync(defaultsPath), 'path:', defaultsPath);
-  debug('.ocdk-logs.json (cwd) exists?', fs.existsSync(defaultsPathCwd));
-  debug('using defaults path:', defaultsPathToUse);
-}
-try {
-  if (fs.existsSync(defaultsPathToUse)) {
-    let raw = fs.readFileSync(defaultsPathToUse, 'utf8');
-    if (raw.charCodeAt(0) === 0xFEFF) raw = raw.slice(1); // strip BOM
-    const parsed = JSON.parse(raw);
-    if (parsed && typeof parsed === 'object') {
-      // Only overwrite from file when value is a non-empty string and not the placeholder (preserve in-code defaults otherwise)
-      const execId = typeof parsed.execution_log_id === 'string' ? parsed.execution_log_id.trim() : '';
-      const groupId = typeof parsed.log_group_id === 'string' ? parsed.log_group_id.trim() : '';
-      if (execId !== '' && execId !== '__EXECUTION_LOG_ID__') {
-        DEFAULT_EXECUTION_LOG_ID = execId;
-        if (DEBUG) debug('from .ocdk-logs.json: execution_log_id = non-empty');
-      } else if (DEBUG) debug('from .ocdk-logs.json: execution_log_id = empty/placeholder, keeping in-code');
-      if (groupId !== '' && groupId !== '__LOG_GROUP_ID__') {
-        DEFAULT_LOG_GROUP_ID = groupId;
-        if (DEBUG) debug('from .ocdk-logs.json: log_group_id = non-empty');
-      } else if (DEBUG) debug('from .ocdk-logs.json: log_group_id = empty/placeholder, keeping in-code');
-    } else if (DEBUG) debug('from .ocdk-logs.json: parsed not an object');
-  }
-} catch (e) {
-  if (DEBUG) debug('error reading .ocdk-logs.json:', e.message || e);
-  // ignore defaults file errors; in-code defaults or env vars can still be used
+  debug('in-code defaults: execution_log=', DEFAULT_EXECUTION_LOG_ID === '__EXECUTION_LOG_ID__' ? 'placeholder' : 'set', 'log_group=', DEFAULT_LOG_GROUP_ID === '__LOG_GROUP_ID__' ? 'placeholder' : 'set');
 }
 if (DEFAULT_EXECUTION_LOG_ID === '__EXECUTION_LOG_ID__') DEFAULT_EXECUTION_LOG_ID = '';
 if (DEFAULT_LOG_GROUP_ID === '__LOG_GROUP_ID__') DEFAULT_LOG_GROUP_ID = '';
 if (DEBUG) {
-  debug('final DEFAULT_EXECUTION_LOG_ID:', DEFAULT_EXECUTION_LOG_ID ? `${DEFAULT_EXECUTION_LOG_ID.slice(0, 30)}...` : '(empty)');
-  debug('final DEFAULT_LOG_GROUP_ID:', DEFAULT_LOG_GROUP_ID ? `${DEFAULT_LOG_GROUP_ID.slice(0, 30)}...` : '(empty)');
+  debug('final execution_log:', DEFAULT_EXECUTION_LOG_ID ? `${DEFAULT_EXECUTION_LOG_ID.slice(0, 30)}...` : '(empty)', 'log_group:', DEFAULT_LOG_GROUP_ID ? `${DEFAULT_LOG_GROUP_ID.slice(0, 30)}...` : '(empty)');
 }
 
 /**
@@ -274,7 +237,7 @@ async function main() {
   }
   if (!effectiveLogGroupId) {
     console.error(
-      'Missing log group OCID. Set OCI_LOG_GROUP_ID (or LOG_GROUP_OCID / LOG_GROUP_ID), or run "npx ocdk write-log-config" after deploy to set defaults in-code or in .ocdk-logs.json.'
+      'Missing log group OCID. Set OCI_LOG_GROUP_ID (or LOG_GROUP_OCID / LOG_GROUP_ID), or run "npx ocdk write-log-config" after deploy to inject IDs into tail-function-logs.js.'
     );
     process.exit(1);
   }

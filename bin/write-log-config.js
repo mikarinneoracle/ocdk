@@ -1,8 +1,7 @@
 #!/usr/bin/env node
 /**
- * Write .ocdk-logs.json and tail-function-logs.js to the project root using terraform output.
- * Run from project root after deploy when the provisioner did not create them.
- * Usage: npx ocdk write-log-config
+ * Write tail-function-logs.js to the project root with log IDs from terraform output.
+ * Run from project root after deploy. Usage: npx ocdk write-log-config
  */
 const { execSync } = require('child_process');
 const path = require('path');
@@ -33,10 +32,6 @@ if (!logGroupId || !executionLogId) {
   console.error('Missing log_group_id or execution_log_id from terraform output.');
   process.exit(1);
 }
-
-const logsJson = JSON.stringify({ log_group_id: logGroupId, execution_log_id: executionLogId }, null, 2);
-fs.writeFileSync(path.join(projectRoot, '.ocdk-logs.json'), logsJson + '\n', 'utf8');
-console.log('Wrote .ocdk-logs.json');
 
 const srcScript = path.join(packageRoot, 'scripts', 'tail-function-log.js');
 const destScript = path.join(projectRoot, 'tail-function-logs.js');

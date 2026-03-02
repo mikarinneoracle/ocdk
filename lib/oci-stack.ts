@@ -409,7 +409,7 @@ tail-function-logs.js
       });
       executionLog.node.addDependency(functionApp);
 
-      // Log config (.ocdk-logs.json, tail-function-logs.js) is written by: npx ocdk write-log-config (run after deploy).
+      // tail-function-logs.js is written by: npx ocdk write-log-config (run after deploy).
 
       new TerraformOutput(this, 'ocir_repository_name', { value: ocirRepository.displayName, description: 'OCIR repository name' });
       if (apiGateway) {

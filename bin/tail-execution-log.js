@@ -31,7 +31,7 @@ function extractJson(raw) {
   }
 }
 
-function main() {
+async function main() {
   const packageRoot = path.join(__dirname, '..');
   const projectDir = process.env.OCDK_PROJECT_DIR || process.cwd();
   const fs = require('fs');
@@ -47,18 +47,7 @@ function main() {
   let logGroupId = null;
   let executionLogId = null;
 
-  // 1) Prefer .ocdk-logs.json in project (written by write-log-config)
-  const logsJsonPath = path.join(projectDir, '.ocdk-logs.json');
-  if (fs.existsSync(logsJsonPath)) {
-    try {
-      const raw = fs.readFileSync(logsJsonPath, 'utf8').replace(/^\uFEFF/, '').trim();
-      const data = JSON.parse(raw);
-      if (data && typeof data.log_group_id === 'string') logGroupId = data.log_group_id.trim();
-      if (data && typeof data.execution_log_id === 'string') executionLogId = data.execution_log_id.trim();
-    } catch (e) {}
-  }
-
-  // 2) Terraform output from stack dir (same as write-log-config)
+  // 1) Terraform output from stack dir
   if ((!logGroupId || !executionLogId) && fs.existsSync(stackDir)) {
     try {
       const { execSync } = require('child_process');
@@ -67,7 +56,7 @@ function main() {
     } catch (e) {}
   }
 
-  // 3) .ocdk-outputs.json or cdktf output -json
+  // 2) .ocdk-outputs.json or cdktf output -json
   if (!logGroupId || !executionLogId) {
     let parsed = null;
     const outputsPath = path.join(projectDir, '.ocdk-outputs.json');
@@ -112,61 +101,45 @@ function main() {
 
   if (!logGroupId || !executionLogId) {
     console.error('Outputs "log_group_id" and "execution_log_id" not found.');
-    console.error('Run from project root: npx ocdk write-log-config  (then use: node tail-function-logs.js  or  npx ocdk tail:execution-log)');
-    fail('Deploy the stack first, then run write-log-config.');
+    fail('Deploy the stack first. Log IDs come from terraform output or set OCI_LOG_GROUP_ID and OCI_EXECUTION_LOG_ID.');
   }
 
-  const now = new Date();
-  const start = new Date(now.getTime() - 10 * 60 * 1000); // last 10 minutes
-  const timeStart = start.toISOString();
-  const timeEnd = now.toISOString();
-
-  // Log search query: scope to compartment/log group/log and show latest entries (limit 20 like old logic)
   const scope = `${compId}/${logGroupId}/${executionLogId}`;
   const limit = 20;
-  const query = `search "${scope}" | sort by datetime desc | limit ${limit}`;
-
+  const intervalMs = parseInt(process.env.OCI_LOG_INTERVAL_MS || '5000', 10) || 5000;
   const debug = process.env.OCI_TAIL_DEBUG === '1' || process.env.OCI_TAIL_DEBUG === 'true';
-  if (debug) {
-    console.error('Variables inserted: compartment, log_group_id, execution_log_id, time-start, time-end');
-    console.error(
-      'oci logging-search search-logs \\\n' +
-        `  --search-query 'search "${scope}" | sort by datetime desc | limit ${limit}' \\\n` +
-        `  --time-start ${timeStart} \\\n` +
-        `  --time-end ${timeEnd}`
+
+  function runOneSearch(timeStart, timeEnd) {
+    const query = `search "${scope}" | sort by datetime desc | limit ${limit}`;
+    if (debug) {
+      console.error('[oci-tail]', timeStart, '->', timeEnd);
+    }
+    const res = spawnSync(
+      'oci',
+      [
+        'logging-search',
+        'search-logs',
+        '--search-query',
+        query,
+        '--time-start',
+        timeStart,
+        '--time-end',
+        timeEnd,
+      ],
+      { encoding: 'utf8', shell: false }
     );
-    console.error('---');
-  }
-  // Do not use shell: true — the query contains "|" which the shell would interpret as a pipe
-  const res = spawnSync(
-    'oci',
-    [
-      'logging-search',
-      'search-logs',
-      '--search-query',
-      query,
-      '--time-start',
-      timeStart,
-      '--time-end',
-      timeEnd,
-    ],
-    { encoding: 'utf8', shell: false }
-  );
-
-  if (res.status !== 0) {
-    if (res.stderr) process.stderr.write(res.stderr);
-    process.exit(res.status ?? 1);
-  }
-
-  // Parse JSON and print only timestamp + message (no raw JSON dump)
-  const raw = (res.stdout || '').trim();
-  const first = raw.indexOf('{');
-  const last = raw.lastIndexOf('}');
-  if (first !== -1 && last > first) {
+    if (res.status !== 0) {
+      if (res.stderr) process.stderr.write(res.stderr);
+      return null;
+    }
+    const raw = (res.stdout || '').trim();
+    const first = raw.indexOf('{');
+    const last = raw.lastIndexOf('}');
+    if (first === -1 || last <= first) return [];
     try {
       const json = JSON.parse(raw.slice(first, last + 1));
       const results = json?.data?.results || [];
-      // Results are newest-first; print in chronological order (oldest first)
+      const lines = [];
       for (let i = results.length - 1; i >= 0; i -= 1) {
         const item = results[i];
         const data = item?.data || item;
@@ -176,15 +149,48 @@ function main() {
         if (typeof ts === 'number') ts = new Date(ts).toISOString();
         else if (!ts) ts = new Date().toISOString();
         const message = inner?.message ?? logContent?.message ?? '';
-        console.log(`${ts} ${message}`);
+        lines.push({ ts: String(ts), message: String(message) });
       }
+      return lines;
     } catch (e) {
-      process.stderr.write(raw + '\n');
+      return [];
     }
-  } else {
-    process.stderr.write(raw + '\n');
+  }
+
+  const seenKeys = new Set();
+  let pollCount = 0;
+
+  process.on('SIGINT', () => {
+    process.exit(0);
+  });
+
+  // eslint-disable-next-line no-constant-condition
+  while (true) {
+    pollCount += 1;
+    const now = new Date();
+    const start = new Date(now.getTime() - 10 * 60 * 1000);
+    const timeStart = start.toISOString();
+    const timeEnd = now.toISOString();
+
+    const lines = runOneSearch(timeStart, timeEnd);
+    if (lines === null) {
+      process.exit(1);
+    }
+    if (debug && (pollCount === 1 || lines.length > 0)) {
+      console.error('[oci-tail] poll #' + pollCount, 'lines:', lines.length, 'seen:', seenKeys.size);
+    }
+    for (const { ts, message } of lines) {
+      const key = `${ts}|${message}`;
+      if (seenKeys.has(key)) continue;
+      seenKeys.add(key);
+      console.log(`${ts} ${message}`);
+    }
+    await new Promise((r) => setTimeout(r, intervalMs));
   }
 }
 
-main();
+main().catch((err) => {
+  console.error(err);
+  process.exit(1);
+});
 

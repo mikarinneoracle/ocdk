@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * Verify built package and prepublish: README present, stack and config valid.
- * Log config is written by: npx ocdk write-log-config (after deploy).
+ * tail-function-logs.js is written by: npx ocdk write-log-config (after deploy).
  */
 const fs = require('fs');
 const path = require('path');

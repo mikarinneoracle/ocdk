@@ -278,26 +278,12 @@ function ensureDefaultApiGwDeploymentJson(projectDir) {
     }
     return p;
 }
-/** Ensure tail-function-logs.js exists in projectDir (copy from package scripts). If .ocdk-logs.json exists, inject its IDs as in-code defaults. */
+/** Ensure tail-function-logs.js exists in projectDir (copy from package scripts). IDs are placeholders until npx ocdk write-log-config is run. */
 function ensureTailFunctionLogsScript(projectDir) {
     const dest = path.join(projectDir, 'tail-function-logs.js');
     const src = path.join(__dirname, '..', 'scripts', 'tail-function-log.js');
     if (fs.existsSync(src)) {
-        let content = fs.readFileSync(src, 'utf8');
-        const logsJsonPath = path.join(projectDir, '.ocdk-logs.json');
-        if (fs.existsSync(logsJsonPath)) {
-            try {
-                const parsed = JSON.parse(fs.readFileSync(logsJsonPath, 'utf8'));
-                if (parsed && typeof parsed.execution_log_id === 'string') {
-                    content = content.replace(/__EXECUTION_LOG_ID__/g, parsed.execution_log_id);
-                }
-                if (parsed && typeof parsed.log_group_id === 'string') {
-                    content = content.replace(/__LOG_GROUP_ID__/g, parsed.log_group_id);
-                }
-            } catch (e) {
-                // leave placeholders if .ocdk-logs.json is invalid
-            }
-        }
+        const content = fs.readFileSync(src, 'utf8');
         fs.writeFileSync(dest, content, 'utf8');
     }
     return dest;

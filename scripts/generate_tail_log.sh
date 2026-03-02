@@ -1,5 +1,5 @@
 #!/bin/sh
-# Generate .ocdk-logs.json and tail-function-logs.js in project root. Run from Terraform local-exec.
+# Generate tail-function-logs.js in project root (IDs from terraform output). Run from Terraform local-exec.
 # Terraform runs with cwd = package root (e.g. .../project/node_modules/.../oci-cdk), not inside cdktf.out/stacks.
 # So we must find project root by walking up to a dir named node_modules; its parent is the project root.
 PROJ_DIR="${OCDK_PROJECT_DIR:-${PROJ_DIR}}"
@@ -33,7 +33,6 @@ else
   EXEC_LOG_ID="$(terraform output -raw execution_log_id 2>/dev/null || echo '')"
 fi
 if [ -z "$LOG_GROUP_ID" ] || [ -z "$EXEC_LOG_ID" ]; then exit 0; fi
-printf '{"log_group_id":"%s","execution_log_id":"%s"}\n' "$LOG_GROUP_ID" "$EXEC_LOG_ID" > "$PROJ_DIR/.ocdk-logs.json"
 # Create tail-function-logs.js if missing (copy from package)
 if [ ! -f "$PROJ_DIR/tail-function-logs.js" ] && [ -f "$PROJ_DIR/node_modules/@mikarinneoracle/oci-cdk/scripts/tail-function-log.js" ]; then
   cp "$PROJ_DIR/node_modules/@mikarinneoracle/oci-cdk/scripts/tail-function-log.js" "$PROJ_DIR/tail-function-logs.js"

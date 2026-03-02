@@ -99,15 +99,17 @@ export class OciStack extends TerraformStack {
       tenancyOcid: config.tenancyId,
     });
 
-    // OCIR Container Repository (root compartment allowed if explicitly set)
+    // STACK_ACTION: "function" => VCN, subnet, OCIR, App, Function, log group, exec log; "api-gateway" (default) => all including API Gateway deployment.
+    const stackAction = process.env.STACK_ACTION?.trim().toLowerCase() === 'function' ? 'function' : 'api-gateway';
+
+    // OCIR Container Repository (root compartment allowed if explicitly set).
     const ocirCompartmentId = config.ocirCompartmentId || config.compartmentId;
     const ocirRepoName = config.ocirRepositoryName || config.functionName || 'oci-function';
-
     const ocirRepository = new ArtifactsContainerRepository(this, 'OcirRepository', {
       compartmentId: ocirCompartmentId,
       displayName: ocirRepoName,
-      isPublic: false, // Private repository by default
-      isImmutable: false, // Allow image updates
+      isPublic: false,
+      isImmutable: false,
     });
 
     const dockerContextPath = (config.dockerContextPath || config.functionJarPath)?.trim();
@@ -125,6 +127,9 @@ export class OciStack extends TerraformStack {
       const imageUrl = getOciImageUrl(config);
       const appName = config.functionAppName || config.functionName!;
       const resourceName = appName;
+
+      const privateSubnetIdFromEnv = (process.env.PRIVATE_SUBNET_ID || process.env.PRIVATE_SUBNET_OCID || '').trim();
+      const publicSubnetIdFromEnv = (process.env.PUBLIC_SUBNET_ID || process.env.PUBLIC_SUBNET_OCID || '').trim();
 
       this.addOverride('terraform.required_providers.null', {
         source: 'hashicorp/null',
@@ -220,89 +225,102 @@ tail-function-logs.js
         { 'local-exec': { command: `docker push ${imageUrl}` } },
       ]);
 
-      const vcn = new CoreVcn(this, 'Vcn', {
-        compartmentId: config.compartmentId,
-        displayName: `${resourceName}-vcn`,
-        cidrBlocks: ['10.0.0.0/16'],
-        dnsLabel: 'appfn',
-      });
-      const publicSubnet = new CoreSubnet(this, 'PublicSubnet', {
-        compartmentId: config.compartmentId,
-        vcnId: vcn.id,
-        displayName: `${resourceName}-public`,
-        cidrBlock: '10.0.1.0/24',
-        dnsLabel: 'public',
-        prohibitPublicIpOnVnic: false,
-      });
-      const privateSubnet = new CoreSubnet(this, 'PrivateSubnet', {
-        compartmentId: config.compartmentId,
-        vcnId: vcn.id,
-        displayName: `${resourceName}-private`,
-        cidrBlock: '10.0.2.0/24',
-        dnsLabel: 'private',
-        prohibitPublicIpOnVnic: true,
-      });
+      let publicSubnet: CoreSubnet | undefined;
+      let privateSubnet: CoreSubnet | undefined;
+      const createNetworking = !privateSubnetIdFromEnv || !publicSubnetIdFromEnv;
+      if (createNetworking) {
+        const vcn = new CoreVcn(this, 'Vcn', {
+          compartmentId: config.compartmentId,
+          displayName: `${resourceName}-vcn`,
+          cidrBlocks: ['10.0.0.0/16'],
+          dnsLabel: 'appfn',
+        });
+        if (!publicSubnetIdFromEnv) {
+          publicSubnet = new CoreSubnet(this, 'PublicSubnet', {
+            compartmentId: config.compartmentId,
+            vcnId: vcn.id,
+            displayName: `${resourceName}-public`,
+            cidrBlock: '10.0.1.0/24',
+            dnsLabel: 'public',
+            prohibitPublicIpOnVnic: false,
+          });
+          const publicSl = new CoreSecurityList(this, 'PublicSecurityList', {
+            compartmentId: config.compartmentId,
+            vcnId: vcn.id,
+            displayName: `${resourceName}-public-sl`,
+            ingressSecurityRules: [
+              { protocol: '6', source: '0.0.0.0/0', description: 'HTTP', tcpOptions: { min: 80, max: 80 } },
+              { protocol: '6', source: '0.0.0.0/0', description: 'HTTPS', tcpOptions: { min: 443, max: 443 } },
+            ],
+            egressSecurityRules: [{ protocol: 'all', destination: '0.0.0.0/0', description: 'All' }],
+          });
+          publicSubnet.addOverride('security_list_ids', [publicSl.id]);
+          const igw = new CoreInternetGateway(this, 'InternetGateway', {
+            compartmentId: config.compartmentId,
+            vcnId: vcn.id,
+            displayName: `${resourceName}-igw`,
+            enabled: true,
+          });
+          const pubRt = new CoreRouteTable(this, 'PublicRouteTable', {
+            compartmentId: config.compartmentId,
+            vcnId: vcn.id,
+            displayName: `${resourceName}-public-rt`,
+            routeRules: [
+              { networkEntityId: igw.id, destination: '0.0.0.0/0', destinationType: 'CIDR_BLOCK', description: 'Internet' },
+            ],
+          });
+          publicSubnet.addOverride('route_table_id', pubRt.id);
+        }
+        if (!privateSubnetIdFromEnv) {
+          privateSubnet = new CoreSubnet(this, 'PrivateSubnet', {
+            compartmentId: config.compartmentId,
+            vcnId: vcn.id,
+            displayName: `${resourceName}-private`,
+            cidrBlock: '10.0.2.0/24',
+            dnsLabel: 'private',
+            prohibitPublicIpOnVnic: true,
+          });
+          const privateSl = new CoreSecurityList(this, 'PrivateSecurityList', {
+            compartmentId: config.compartmentId,
+            vcnId: vcn.id,
+            displayName: `${resourceName}-private-sl`,
+            ingressSecurityRules: [
+              { protocol: '6', source: '10.0.2.0/24', description: 'PG', tcpOptions: { min: 5432, max: 5432 } },
+            ],
+            egressSecurityRules: [{ protocol: 'all', destination: '0.0.0.0/0', description: 'All' }],
+          });
+          privateSubnet.addOverride('security_list_ids', [privateSl.id]);
+          const allServices = new DataOciCoreServices(this, 'AllServices', {});
+          const svcGw = new CoreServiceGateway(this, 'ServiceGateway', {
+            compartmentId: config.compartmentId,
+            vcnId: vcn.id,
+            displayName: `${resourceName}-sgw`,
+            services: [{ serviceId: allServices.services.get(0).id }],
+          });
+          const privRt = new CoreRouteTable(this, 'PrivateRouteTable', {
+            compartmentId: config.compartmentId,
+            vcnId: vcn.id,
+            displayName: `${resourceName}-private-rt`,
+            routeRules: [
+              { networkEntityId: svcGw.id, destination: allServices.services.get(0).cidrBlock, destinationType: 'SERVICE_CIDR_BLOCK', description: 'OCIR' },
+            ],
+          });
+          privateSubnet.addOverride('route_table_id', privRt.id);
+        }
+      }
 
-      const publicSl = new CoreSecurityList(this, 'PublicSecurityList', {
-        compartmentId: config.compartmentId,
-        vcnId: vcn.id,
-        displayName: `${resourceName}-public-sl`,
-        ingressSecurityRules: [
-          { protocol: '6', source: '0.0.0.0/0', description: 'HTTP', tcpOptions: { min: 80, max: 80 } },
-          { protocol: '6', source: '0.0.0.0/0', description: 'HTTPS', tcpOptions: { min: 443, max: 443 } },
-        ],
-        egressSecurityRules: [{ protocol: 'all', destination: '0.0.0.0/0', description: 'All' }],
-      });
-      publicSubnet.addOverride('security_list_ids', [publicSl.id]);
-      const privateSl = new CoreSecurityList(this, 'PrivateSecurityList', {
-        compartmentId: config.compartmentId,
-        vcnId: vcn.id,
-        displayName: `${resourceName}-private-sl`,
-        ingressSecurityRules: [
-          { protocol: '6', source: '10.0.2.0/24', description: 'PG', tcpOptions: { min: 5432, max: 5432 } },
-        ],
-        egressSecurityRules: [{ protocol: 'all', destination: '0.0.0.0/0', description: 'All' }],
-      });
-      privateSubnet.addOverride('security_list_ids', [privateSl.id]);
+      const functionAppSubnetId = privateSubnetIdFromEnv || (privateSubnet?.id ?? '');
+      const publicSubnetIdForApiGw = publicSubnetIdFromEnv || (publicSubnet?.id ?? '');
 
-      const allServices = new DataOciCoreServices(this, 'AllServices', {});
-      const svcGw = new CoreServiceGateway(this, 'ServiceGateway', {
-        compartmentId: config.compartmentId,
-        vcnId: vcn.id,
-        displayName: `${resourceName}-sgw`,
-        services: [{ serviceId: allServices.services.get(0).id }],
-      });
-      const privRt = new CoreRouteTable(this, 'PrivateRouteTable', {
-        compartmentId: config.compartmentId,
-        vcnId: vcn.id,
-        displayName: `${resourceName}-private-rt`,
-        routeRules: [
-          { networkEntityId: svcGw.id, destination: allServices.services.get(0).cidrBlock, destinationType: 'SERVICE_CIDR_BLOCK', description: 'OCIR' },
-        ],
-      });
-      privateSubnet.addOverride('route_table_id', privRt.id);
-      const igw = new CoreInternetGateway(this, 'InternetGateway', {
-        compartmentId: config.compartmentId,
-        vcnId: vcn.id,
-        displayName: `${resourceName}-igw`,
-        enabled: true,
-      });
-      const pubRt = new CoreRouteTable(this, 'PublicRouteTable', {
-        compartmentId: config.compartmentId,
-        vcnId: vcn.id,
-        displayName: `${resourceName}-public-rt`,
-        routeRules: [
-          { networkEntityId: igw.id, destination: '0.0.0.0/0', destinationType: 'CIDR_BLOCK', description: 'Internet' },
-        ],
-      });
-      publicSubnet.addOverride('route_table_id', pubRt.id);
-
-      const apiGateway = new ApigatewayGateway(this, 'ApiGateway', {
-        compartmentId: config.compartmentId,
-        subnetId: publicSubnet.id,
-        endpointType: 'PUBLIC',
-        displayName: `${resourceName}-api-gateway`,
-      });
+      let apiGateway: ApigatewayGateway | undefined;
+      if (stackAction === 'api-gateway' && publicSubnetIdForApiGw) {
+        apiGateway = new ApigatewayGateway(this, 'ApiGateway', {
+          compartmentId: config.compartmentId,
+          subnetId: publicSubnetIdForApiGw,
+          endpointType: 'PUBLIC',
+          displayName: `${resourceName}-api-gateway`,
+        });
+      }
       const logGroup = new LoggingLogGroup(this, 'LogGroup', {
         compartmentId: config.compartmentId,
         displayName: appName,
@@ -311,7 +329,7 @@ tail-function-logs.js
       const functionApp = new FunctionsApplication(this, 'FunctionApp', {
         compartmentId: config.compartmentId,
         displayName: appName,
-        subnetIds: [privateSubnet.id],
+        subnetIds: [functionAppSubnetId],
       });
       const ociFunction = new FunctionsFunction(this, 'Function', {
         applicationId: functionApp.id,
@@ -322,54 +340,56 @@ tail-function-logs.js
         ...(config.functionConfig && Object.keys(config.functionConfig).length > 0 ? { config: config.functionConfig } : {}),
       });
       ociFunction.addOverride('depends_on', [`null_resource.${buildAndPushImageId}`]);
-      const pathPrefix = config.apiGwPathPrefix ?? '/';
-      let routes: Array<{ path: string; methods: string[]; backend: { type: string; functionId: typeof ociFunction.id; readTimeoutInSeconds?: number } }>;
-      if (config.apiGwDeploymentJsonPath && fs.existsSync(config.apiGwDeploymentJsonPath)) {
-        const raw = fs.readFileSync(config.apiGwDeploymentJsonPath, 'utf8');
-        const spec = JSON.parse(raw) as { routes?: Array<{ path?: string; methods?: string[]; backend?: Record<string, unknown> }> };
-        const routeList = spec?.routes ?? [];
-        routes = routeList.map((r) => {
-          const b = r.backend ?? {};
-          const functionIdRaw = (b.functionId ?? b.function_id) as string | undefined;
-          const functionId = typeof functionIdRaw === 'string' && functionIdRaw.includes('${function_id}')
-            ? ociFunction.id
-            : (functionIdRaw ?? ociFunction.id);
-          const readTimeout = (b.readTimeoutInSeconds ?? b.read_timeout_in_seconds) as number | undefined;
-          return {
-            path: r.path ?? '/{path*}',
-            methods: Array.isArray(r.methods) ? r.methods : ['GET', 'POST', 'OPTIONS'],
-            backend: {
-              type: (b.type as string) ?? 'ORACLE_FUNCTIONS_BACKEND',
-              functionId,
-              ...(readTimeout != null ? { readTimeoutInSeconds: readTimeout } : {}),
+      if (stackAction === 'api-gateway' && apiGateway) {
+        const pathPrefix = config.apiGwPathPrefix ?? '/';
+        let routes: Array<{ path: string; methods: string[]; backend: { type: string; functionId: typeof ociFunction.id; readTimeoutInSeconds?: number } }>;
+        if (config.apiGwDeploymentJsonPath && fs.existsSync(config.apiGwDeploymentJsonPath)) {
+          const raw = fs.readFileSync(config.apiGwDeploymentJsonPath, 'utf8');
+          const spec = JSON.parse(raw) as { routes?: Array<{ path?: string; methods?: string[]; backend?: Record<string, unknown> }> };
+          const routeList = spec?.routes ?? [];
+          routes = routeList.map((r) => {
+            const b = r.backend ?? {};
+            const functionIdRaw = (b.functionId ?? b.function_id) as string | undefined;
+            const functionId = typeof functionIdRaw === 'string' && functionIdRaw.includes('${function_id}')
+              ? ociFunction.id
+              : (functionIdRaw ?? ociFunction.id);
+            const readTimeout = (b.readTimeoutInSeconds ?? b.read_timeout_in_seconds) as number | undefined;
+            return {
+              path: r.path ?? '/{path*}',
+              methods: Array.isArray(r.methods) ? r.methods : ['GET', 'POST', 'OPTIONS'],
+              backend: {
+                type: (b.type as string) ?? 'ORACLE_FUNCTIONS_BACKEND',
+                functionId,
+                ...(readTimeout != null ? { readTimeoutInSeconds: readTimeout } : {}),
+              },
+            };
+          });
+        } else {
+          const routePath = config.apiGwRoutePath ?? '/{path*}';
+          const methods = config.apiGwMethods?.length ? config.apiGwMethods : ['GET', 'POST', 'OPTIONS'];
+          routes = [
+            {
+              path: routePath,
+              methods,
+              backend: {
+                type: 'ORACLE_FUNCTIONS_BACKEND',
+                functionId: ociFunction.id,
+                readTimeoutInSeconds: config.functionTimeoutSeconds ?? 30,
+              },
             },
-          };
-        });
-      } else {
-        const routePath = config.apiGwRoutePath ?? '/{path*}';
-        const methods = config.apiGwMethods?.length ? config.apiGwMethods : ['GET', 'POST', 'OPTIONS'];
-        routes = [
-          {
-            path: routePath,
-            methods,
-            backend: {
-              type: 'ORACLE_FUNCTIONS_BACKEND',
-              functionId: ociFunction.id,
-              readTimeoutInSeconds: config.functionTimeoutSeconds ?? 30,
-            },
+          ];
+        }
+        const apiDeployment = new ApigatewayDeployment(this, 'ApiDeployment', {
+          compartmentId: config.compartmentId,
+          gatewayId: apiGateway.id,
+          pathPrefix,
+          displayName: `${resourceName}-deployment`,
+          specification: {
+            routes,
           },
-        ];
+        });
+        apiDeployment.node.addDependency(ociFunction);
       }
-      const apiDeployment = new ApigatewayDeployment(this, 'ApiDeployment', {
-        compartmentId: config.compartmentId,
-        gatewayId: apiGateway.id,
-        pathPrefix,
-        displayName: `${resourceName}-deployment`,
-        specification: {
-          routes,
-        },
-      });
-      apiDeployment.node.addDependency(ociFunction);
 
       // Functions execution log: SERVICE log for the Functions application (category invoke)
       const executionLog = new LoggingLog(this, 'ExecutionLog', {
@@ -389,36 +409,35 @@ tail-function-logs.js
       });
       executionLog.node.addDependency(functionApp);
 
-      // Write .ocdk-logs.json and tail-function-logs.js into project root. Use project dir from config (synth time) so we don't rely on OCDK_PROJECT_DIR at apply time.
+      // Run scripts/generate_tail_log.sh via local-exec (writes .ocdk-logs.json and tail-function-logs.js to project root).
+      // Avoid ${...} in the command so Terraform does not treat it as template interpolation.
       const projectDir = config.dockerContextPath ? path.resolve(config.dockerContextPath) : '';
-      const projectDirShell = projectDir ? "'" + projectDir.replace(/'/g, "'\\''") + "'" : '';
+      const generateScriptPath = path.join(__dirname, '..', '..', 'scripts', 'generate_tail_log.sh');
+      const generateScriptB64 = fs.existsSync(generateScriptPath)
+        ? Buffer.from(fs.readFileSync(generateScriptPath, 'utf8').replace(/\r\n/g, '\n'), 'utf8').toString('base64')
+        : '';
       const writeOutputsId = 'WriteOutputsToProject';
       this.addOverride(`resource.null_resource.${writeOutputsId}.triggers`, { execution_log_id: executionLog.id });
       this.addOverride(`resource.null_resource.${writeOutputsId}.depends_on`, ['oci_logging_log.ExecutionLog']);
-      const projVar = projectDirShell ? `PROJ_DIR=${projectDirShell}; ` : '';
-      const projRef = projectDirShell ? '$PROJ_DIR' : '$OCDK_PROJECT_DIR';
-      const projGuard = projectDirShell ? 'true' : '[ -n "$OCDK_PROJECT_DIR" ]';
-      this.addOverride(`resource.null_resource.${writeOutputsId}.provisioner`, [
-        {
-          'local-exec': {
-            command:
-              projVar +
-              `if ${projGuard}; then ` +
-              'LOG_GROUP_ID="$(terraform output -raw log_group_id 2>/dev/null || echo "")"; ' +
-              'EXEC_LOG_ID="$(terraform output -raw execution_log_id 2>/dev/null || echo "")"; ' +
-              'if [ -n "$LOG_GROUP_ID" ] && [ -n "$EXEC_LOG_ID" ]; then ' +
-              `printf \\'{\\"log_group_id\\":\\"%s\\",\\"execution_log_id\\":\\"%s\\"}\\\\n\\' "$LOG_GROUP_ID" "$EXEC_LOG_ID" > "${projRef}/.ocdk-logs.json"; ` +
-              `TAIL_SCRIPT="${projRef}/node_modules/@mikarinneoracle/oci-cdk/scripts/tail-function-log.js"; ` +
-              `if [ -f "$TAIL_SCRIPT" ]; then cp "$TAIL_SCRIPT" "${projRef}/tail-function-logs.js"; else echo "ocdk: tail script not found at $TAIL_SCRIPT (install @mikarinneoracle/oci-cdk in the project)"; fi; ` +
-              'fi; ' +
-              'fi',
-          },
-        },
-      ]);
+      const runGenerateScript =
+        generateScriptB64
+          ? 'PROJ_DIR=$OCDK_PROJECT_DIR; export OCDK_PROJECT_DIR="$PROJ_DIR"; echo "$GENERATE_TAIL_LOG_SCRIPT_B64" | base64 -d | sh'
+          : 'PROJ_DIR=$OCDK_PROJECT_DIR; true';
+      const provisionerBlock: { command: string; environment?: Record<string, string> } = { command: runGenerateScript };
+      const provEnv: Record<string, string> = {};
+      if (generateScriptB64) provEnv.GENERATE_TAIL_LOG_SCRIPT_B64 = generateScriptB64;
+      if (projectDir) {
+        provEnv.PROJ_DIR = projectDir;
+        provEnv.OCDK_PROJECT_DIR = projectDir;
+      }
+      if (Object.keys(provEnv).length) provisionerBlock.environment = provEnv;
+      this.addOverride(`resource.null_resource.${writeOutputsId}.provisioner`, [{ 'local-exec': provisionerBlock }]);
 
       new TerraformOutput(this, 'ocir_repository_name', { value: ocirRepository.displayName, description: 'OCIR repository name' });
-      new TerraformOutput(this, 'api_gateway_host', { value: apiGateway.hostname, description: 'API Gateway hostname' });
-      new TerraformOutput(this, 'function_invoke_url', { value: `https://${apiGateway.hostname}`, description: 'Base URL to invoke the function' });
+      if (apiGateway) {
+        new TerraformOutput(this, 'api_gateway_host', { value: apiGateway.hostname, description: 'API Gateway hostname' });
+        new TerraformOutput(this, 'function_invoke_url', { value: `https://${apiGateway.hostname}`, description: 'Base URL to invoke the function' });
+      }
       new TerraformOutput(this, 'function_id', { value: ociFunction.id, description: 'OCI Function OCID' });
       new TerraformOutput(this, 'log_group_id', { value: logGroup.id, description: 'OCI Log Group OCID for the application' });
       new TerraformOutput(this, 'execution_log_id', { value: executionLog.id, description: 'OCI Functions execution log OCID' });

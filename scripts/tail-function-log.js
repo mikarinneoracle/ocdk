@@ -7,9 +7,9 @@ const logging = require('oci-logging');
 const loggingsearch = require('oci-loggingsearch');
 const common = require('oci-common');
 
-// Defaults: first from a small JSON file written at deploy time, then empty.
-let DEFAULT_EXECUTION_LOG_ID = '';
-let DEFAULT_LOG_GROUP_ID = '';
+// Defaults: placeholders (replaced by deploy local-exec via sed), or .ocdk-logs.json, or empty.
+let DEFAULT_EXECUTION_LOG_ID = '__EXECUTION_LOG_ID__';
+let DEFAULT_LOG_GROUP_ID = '__LOG_GROUP_ID__';
 
 try {
   const defaultsPath = path.join(process.cwd(), '.ocdk-logs.json');
@@ -28,6 +28,8 @@ try {
 } catch (e) {
   // ignore defaults file errors; env vars can still be used
 }
+if (DEFAULT_EXECUTION_LOG_ID === '__EXECUTION_LOG_ID__') DEFAULT_EXECUTION_LOG_ID = '';
+if (DEFAULT_LOG_GROUP_ID === '__LOG_GROUP_ID__') DEFAULT_LOG_GROUP_ID = '';
 
 /**
  * Pull log entries for a given log OCID, optionally scoped by log group ID.

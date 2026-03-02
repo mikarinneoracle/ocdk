@@ -1,13 +1,22 @@
 #!/bin/sh
 # Generate .ocdk-logs.json and tail-function-logs.js in project root. Run from Terraform local-exec.
-# Expects OCDK_PROJECT_DIR or PROJ_DIR; if unset, infers project root when cwd is cdktf.out/stacks/<name>.
-# Terraform must be in PATH; cwd is the stack dir so terraform output works.
+# Terraform runs with cwd = package root (e.g. .../project/node_modules/.../oci-cdk), not inside cdktf.out/stacks.
+# So we must find project root by walking up to a dir named node_modules; its parent is the project root.
 PROJ_DIR="${OCDK_PROJECT_DIR:-${PROJ_DIR}}"
 if [ -z "$PROJ_DIR" ]; then
-  case "$(pwd)" in
-    */cdktf.out/stacks/*) PROJ_DIR="$(cd ../.. && pwd)" ;;
-    *) [ -d "cdktf.out/stacks" ] && PROJ_DIR="$(pwd)" ;;
-  esac
+  # Walk up from cwd to find a dir named node_modules; its parent is the consumer project root.
+  d="$(pwd)"
+  while [ "$d" != "/" ]; do
+    if [ "$(basename "$d")" = "node_modules" ]; then
+      PROJ_DIR="$(dirname "$d")"
+      break
+    fi
+    d="$(dirname "$d")"
+  done
+  if [ -z "$PROJ_DIR" ]; then
+    # Not under node_modules (e.g. developing ocdk repo): use cwd as project root
+    PROJ_DIR="$(pwd)"
+  fi
 fi
 if [ -z "$PROJ_DIR" ]; then exit 0; fi
 # Run terraform output from the stack dir (state lives there)

@@ -41,56 +41,79 @@ function main() {
     fail('OCI_COMPARTMENT_ID (or OCI_COMPARTMENT_OCID) must be set to tail execution logs.');
   }
 
-  let parsed = null;
-  const outputsPath = path.join(projectDir, '.ocdk-outputs.json');
-  if (fs.existsSync(outputsPath)) {
+  const stackName = process.env.OCI_STACK_NAME || 'oci-stack';
+  const stackDir = path.join(projectDir, 'node_modules', '@mikarinneoracle', 'oci-cdk', 'cdktf.out', 'stacks', stackName);
+
+  let logGroupId = null;
+  let executionLogId = null;
+
+  // 1) Prefer .ocdk-logs.json in project (written by write-log-config)
+  const logsJsonPath = path.join(projectDir, '.ocdk-logs.json');
+  if (fs.existsSync(logsJsonPath)) {
     try {
-      const raw = fs.readFileSync(outputsPath, 'utf8').replace(/^\uFEFF/, '').trim();
-      const first = raw.indexOf('{');
-      const last = raw.lastIndexOf('}');
-      if (first !== -1 && last > first) parsed = JSON.parse(raw.slice(first, last + 1));
+      const raw = fs.readFileSync(logsJsonPath, 'utf8').replace(/^\uFEFF/, '').trim();
+      const data = JSON.parse(raw);
+      if (data && typeof data.log_group_id === 'string') logGroupId = data.log_group_id.trim();
+      if (data && typeof data.execution_log_id === 'string') executionLogId = data.execution_log_id.trim();
     } catch (e) {}
   }
-  if (!parsed) {
-    let output = spawnSync('npx', ['cdktf', 'output', '-json'], {
-      cwd: packageRoot,
-      shell: true,
-      encoding: 'utf8',
-    });
-    if (output.status !== 0 || !output.stdout) {
-      output = spawnSync('npx', ['cdktf', 'output', '-json'], {
-        cwd: projectDir,
+
+  // 2) Terraform output from stack dir (same as write-log-config)
+  if ((!logGroupId || !executionLogId) && fs.existsSync(stackDir)) {
+    try {
+      const { execSync } = require('child_process');
+      if (!logGroupId) logGroupId = execSync('terraform output -raw log_group_id', { encoding: 'utf8', cwd: stackDir }).trim();
+      if (!executionLogId) executionLogId = execSync('terraform output -raw execution_log_id', { encoding: 'utf8', cwd: stackDir }).trim();
+    } catch (e) {}
+  }
+
+  // 3) .ocdk-outputs.json or cdktf output -json
+  if (!logGroupId || !executionLogId) {
+    let parsed = null;
+    const outputsPath = path.join(projectDir, '.ocdk-outputs.json');
+    if (fs.existsSync(outputsPath)) {
+      try {
+        const raw = fs.readFileSync(outputsPath, 'utf8').replace(/^\uFEFF/, '').trim();
+        const first = raw.indexOf('{');
+        const last = raw.lastIndexOf('}');
+        if (first !== -1 && last > first) parsed = JSON.parse(raw.slice(first, last + 1));
+      } catch (e) {}
+    }
+    if (!parsed) {
+      let output = spawnSync('npx', ['cdktf', 'output', '-json'], {
+        cwd: packageRoot,
         shell: true,
         encoding: 'utf8',
       });
+      if (output.status !== 0 || !output.stdout) {
+        output = spawnSync('npx', ['cdktf', 'output', '-json'], {
+          cwd: projectDir,
+          shell: true,
+          encoding: 'utf8',
+        });
+      }
+      if (output.status === 0 && output.stdout) {
+        parsed = extractJson(output.stdout);
+      }
     }
-    if (output.status !== 0) {
-      console.error(output.stderr || output.stdout || '');
-      fail('Failed to run "cdktf output -json". Run deploy first (creates .ocdk-outputs.json) or run from the project where you deployed.');
-    }
-    parsed = extractJson(output.stdout);
-    if (!parsed) {
-      console.error('Could not parse outputs. Use the generated script: node tail-function-logs.js (reads .ocdk-outputs.json after deploy).');
-      fail('No valid JSON from cdktf output. Ensure the stack is deployed.');
+    if (parsed) {
+      const outputs = parsed.log_group_id != null ? parsed : Object.values(parsed).find((v) => v && typeof v === 'object' && (v.log_group_id != null || v.execution_log_id != null)) || parsed;
+      function valueOf(out, key) {
+        const v = out[key];
+        if (!v) return undefined;
+        if (typeof v === 'string') return v;
+        if (v && typeof v.value === 'string') return v.value;
+        return undefined;
+      }
+      if (!logGroupId) logGroupId = valueOf(outputs, 'log_group_id');
+      if (!executionLogId) executionLogId = valueOf(outputs, 'execution_log_id');
     }
   }
-
-  // cdktf may return outputs keyed by stack name (e.g. { "oci-stack": { "log_group_id": {...} } })
-  const outputs = parsed.log_group_id != null ? parsed : Object.values(parsed).find((v) => v && typeof v === 'object' && (v.log_group_id != null || v.execution_log_id != null)) || parsed;
-
-  function valueOf(out, key) {
-    const v = out[key];
-    if (!v) return undefined;
-    if (typeof v === 'string') return v;
-    if (v && typeof v.value === 'string') return v.value;
-    return undefined;
-  }
-
-  const logGroupId = valueOf(outputs, 'log_group_id');
-  const executionLogId = valueOf(outputs, 'execution_log_id');
 
   if (!logGroupId || !executionLogId) {
-    fail('Outputs "log_group_id" and "execution_log_id" not found. Deploy the stack first.');
+    console.error('Outputs "log_group_id" and "execution_log_id" not found.');
+    console.error('Run from project root: npx ocdk write-log-config  (then use: node tail-function-logs.js  or  npx ocdk tail:execution-log)');
+    fail('Deploy the stack first, then run write-log-config.');
   }
 
   const now = new Date();
@@ -98,19 +121,23 @@ function main() {
   const timeStart = start.toISOString();
   const timeEnd = now.toISOString();
 
-  // Log search query: scope to compartment/log group/log and show latest entries
+  // Log search query: scope to compartment/log group/log and show latest entries (limit 20 like old logic)
   const scope = `${compId}/${logGroupId}/${executionLogId}`;
-  const query = `search "${scope}" | sort by datetime desc | limit 50`;
+  const limit = 20;
+  const query = `search "${scope}" | sort by datetime desc | limit ${limit}`;
 
-  // Echo equivalent command with vars inserted (compartment, log_group, execution_log, time range)
-  console.error('Variables inserted: compartment, log_group_id, execution_log_id, time-start, time-end');
-  console.error(
-    'oci logging-search search-logs \\\n' +
-      `  --search-query 'search "${scope}" | sort by datetime desc | limit 50' \\\n` +
-      `  --time-start ${timeStart} \\\n` +
-      `  --time-end ${timeEnd}`
-  );
-  console.error('---');
+  const debug = process.env.OCI_TAIL_DEBUG === '1' || process.env.OCI_TAIL_DEBUG === 'true';
+  if (debug) {
+    console.error('Variables inserted: compartment, log_group_id, execution_log_id, time-start, time-end');
+    console.error(
+      'oci logging-search search-logs \\\n' +
+        `  --search-query 'search "${scope}" | sort by datetime desc | limit ${limit}' \\\n` +
+        `  --time-start ${timeStart} \\\n` +
+        `  --time-end ${timeEnd}`
+    );
+    console.error('---');
+  }
+  // Do not use shell: true — the query contains "|" which the shell would interpret as a pipe
   const res = spawnSync(
     'oci',
     [
@@ -123,10 +150,40 @@ function main() {
       '--time-end',
       timeEnd,
     ],
-    { stdio: 'inherit', shell: true }
+    { encoding: 'utf8', shell: false }
   );
 
-  process.exit(res.status ?? 1);
+  if (res.status !== 0) {
+    if (res.stderr) process.stderr.write(res.stderr);
+    process.exit(res.status ?? 1);
+  }
+
+  // Parse JSON and print only timestamp + message (no raw JSON dump)
+  const raw = (res.stdout || '').trim();
+  const first = raw.indexOf('{');
+  const last = raw.lastIndexOf('}');
+  if (first !== -1 && last > first) {
+    try {
+      const json = JSON.parse(raw.slice(first, last + 1));
+      const results = json?.data?.results || [];
+      // Results are newest-first; print in chronological order (oldest first)
+      for (let i = results.length - 1; i >= 0; i -= 1) {
+        const item = results[i];
+        const data = item?.data || item;
+        const logContent = data?.logContent || data;
+        const inner = logContent?.data || logContent;
+        let ts = logContent?.time ?? data?.datetime ?? data?.time;
+        if (typeof ts === 'number') ts = new Date(ts).toISOString();
+        else if (!ts) ts = new Date().toISOString();
+        const message = inner?.message ?? logContent?.message ?? '';
+        console.log(`${ts} ${message}`);
+      }
+    } catch (e) {
+      process.stderr.write(raw + '\n');
+    }
+  } else {
+    process.stderr.write(raw + '\n');
+  }
 }
 
 main();

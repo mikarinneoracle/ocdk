@@ -267,20 +267,38 @@ function getFuncYamlConfig(projectDir) {
         return undefined;
     }
 }
-/** Ensure oci_apigateway_deployment.json exists in projectDir; write default if missing. Returns path. */
+/** Ensure oci_apigateway_deployment.json exists in projectDir; write default if missing. Skip when STACK_ACTION=function. Returns path. */
 function ensureDefaultApiGwDeploymentJson(projectDir) {
+    if (process.env.STACK_ACTION && process.env.STACK_ACTION.trim().toLowerCase() === 'function') {
+        return path.join(projectDir, 'oci_apigateway_deployment.json');
+    }
     const p = path.join(projectDir, 'oci_apigateway_deployment.json');
     if (!fs.existsSync(p)) {
         fs.writeFileSync(p, DEFAULT_APIGW_DEPLOYMENT_JSON, 'utf8');
     }
     return p;
 }
-/** Ensure tail-function-logs.js exists in projectDir (copy from package scripts), like oci_apigateway_deployment.json. */
+/** Ensure tail-function-logs.js exists in projectDir (copy from package scripts). If .ocdk-logs.json exists, inject its IDs as in-code defaults. */
 function ensureTailFunctionLogsScript(projectDir) {
     const dest = path.join(projectDir, 'tail-function-logs.js');
     const src = path.join(__dirname, '..', 'scripts', 'tail-function-log.js');
     if (fs.existsSync(src)) {
-        fs.copyFileSync(src, dest);
+        let content = fs.readFileSync(src, 'utf8');
+        const logsJsonPath = path.join(projectDir, '.ocdk-logs.json');
+        if (fs.existsSync(logsJsonPath)) {
+            try {
+                const parsed = JSON.parse(fs.readFileSync(logsJsonPath, 'utf8'));
+                if (parsed && typeof parsed.execution_log_id === 'string') {
+                    content = content.replace(/__EXECUTION_LOG_ID__/g, parsed.execution_log_id);
+                }
+                if (parsed && typeof parsed.log_group_id === 'string') {
+                    content = content.replace(/__LOG_GROUP_ID__/g, parsed.log_group_id);
+                }
+            } catch (e) {
+                // leave placeholders if .ocdk-logs.json is invalid
+            }
+        }
+        fs.writeFileSync(dest, content, 'utf8');
     }
     return dest;
 }
@@ -570,11 +588,14 @@ async function getOciConfig() {
     if (functionConfig && Object.keys(functionConfig).length === 0)
         functionConfig = undefined;
     const apiGwDeploymentJsonEnv = process.env.OCI_APIGATEWAY_DEPLOYMENT_JSON?.trim();
+    const stackAction = process.env.STACK_ACTION?.trim().toLowerCase();
     const apiGwDeploymentJsonPath = apiGwDeploymentJsonEnv
         ? path.resolve(apiGwDeploymentJsonEnv)
-        : dockerContextPath
-            ? ensureDefaultApiGwDeploymentJson(dockerContextPath)
-            : undefined;
+        : stackAction === 'function'
+            ? undefined
+            : dockerContextPath
+                ? ensureDefaultApiGwDeploymentJson(dockerContextPath)
+                : undefined;
     if (dockerContextPath) {
         ensureTailFunctionLogsScript(dockerContextPath);
     }

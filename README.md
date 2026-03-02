@@ -67,12 +67,11 @@ npx ocdk synth
 npx ocdk destroy
 npx ocdk list
 npx ocdk get
-npx ocdk redeploy:function
 npx ocdk tail:execution-log
 ```
 
 - **`npx ocdk get`** – Generate provider bindings (use this, not `npx cdktf get`).
-- **`npx ocdk redeploy:function`** – Rebuild function image (full Dockerfile), push to OCIR, update function.
-- **`npx ocdk tail:execution-log`** – Tail execution logs (uses `.ocdk-logs.json` or `OCI_LOG_GROUP_ID` / `OCI_EXECUTION_LOG_ID`).
+- **`npx ocdk tail:execution-log`** – Tail function execution logs. Resolves log IDs from terraform output, `.ocdk-logs.json`, or `OCI_LOG_GROUP_ID` / `OCI_EXECUTION_LOG_ID`. Set **`OCI_TAIL_DEBUG=1`** to print debug info to stderr if you get no output. Requires **`OCI_COMPARTMENT_ID`** when run without a project `tail-function-logs.js`.
+- **`npx ocdk write-log-config`** – Optional: write `.ocdk-logs.json` and `tail-function-logs.js` to project root from terraform output.
 
 Options (e.g. `--auto-approve`) are passed through: `npx ocdk deploy --auto-approve`.

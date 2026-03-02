@@ -409,29 +409,7 @@ tail-function-logs.js
       });
       executionLog.node.addDependency(functionApp);
 
-      // Run scripts/generate_tail_log.sh via local-exec (writes .ocdk-logs.json and tail-function-logs.js to project root).
-      // Avoid ${...} in the command so Terraform does not treat it as template interpolation.
-      const projectDir = config.dockerContextPath ? path.resolve(config.dockerContextPath) : '';
-      const generateScriptPath = path.join(__dirname, '..', '..', 'scripts', 'generate_tail_log.sh');
-      const generateScriptB64 = fs.existsSync(generateScriptPath)
-        ? Buffer.from(fs.readFileSync(generateScriptPath, 'utf8').replace(/\r\n/g, '\n'), 'utf8').toString('base64')
-        : '';
-      const writeOutputsId = 'WriteOutputsToProject';
-      this.addOverride(`resource.null_resource.${writeOutputsId}.triggers`, { execution_log_id: executionLog.id });
-      this.addOverride(`resource.null_resource.${writeOutputsId}.depends_on`, ['oci_logging_log.ExecutionLog']);
-      const runGenerateScript =
-        generateScriptB64
-          ? 'PROJ_DIR=$OCDK_PROJECT_DIR; export OCDK_PROJECT_DIR="$PROJ_DIR"; echo "$GENERATE_TAIL_LOG_SCRIPT_B64" | base64 -d | sh'
-          : 'PROJ_DIR=$OCDK_PROJECT_DIR; true';
-      const provisionerBlock: { command: string; environment?: Record<string, string> } = { command: runGenerateScript };
-      const provEnv: Record<string, string> = {};
-      if (generateScriptB64) provEnv.GENERATE_TAIL_LOG_SCRIPT_B64 = generateScriptB64;
-      if (projectDir) {
-        provEnv.PROJ_DIR = projectDir;
-        provEnv.OCDK_PROJECT_DIR = projectDir;
-      }
-      if (Object.keys(provEnv).length) provisionerBlock.environment = provEnv;
-      this.addOverride(`resource.null_resource.${writeOutputsId}.provisioner`, [{ 'local-exec': provisionerBlock }]);
+      // Log config (.ocdk-logs.json, tail-function-logs.js) is written by: npx ocdk write-log-config (run after deploy).
 
       new TerraformOutput(this, 'ocir_repository_name', { value: ocirRepository.displayName, description: 'OCIR repository name' });
       if (apiGateway) {

@@ -1,5 +1,6 @@
 // Tail OCI logs using OCI_EXECUTION_LOG_ID and OCI_LOG_GROUP_ID env vars.
 // Prints only the log lines (no metadata), similar to `tail -f`.
+// Set OCI_TAIL_DEBUG=1 for debug output (IDs, query, result counts, errors).
 
 const fs = require('fs');
 const path = require('path');
@@ -7,29 +8,61 @@ const logging = require('oci-logging');
 const loggingsearch = require('oci-loggingsearch');
 const common = require('oci-common');
 
-// Defaults: placeholders (replaced by deploy local-exec via sed), or .ocdk-logs.json, or empty.
+const DEBUG = process.env.OCI_TAIL_DEBUG === '1' || process.env.OCI_TAIL_DEBUG === 'true';
+function debug(...args) {
+  if (DEBUG) {
+    console.error('[oci-tail-debug]', ...args);
+  }
+}
+
+// Defaults: in-code (set by npx ocdk write-log-config), or .ocdk-logs.json, or env vars. Placeholders become empty.
+// Resolve script dir so we find .ocdk-logs.json next to this script even when cwd is different (e.g. node subdir/tail-function-logs.js).
+const scriptDir = typeof __dirname !== 'undefined' ? __dirname : process.cwd();
 let DEFAULT_EXECUTION_LOG_ID = '__EXECUTION_LOG_ID__';
 let DEFAULT_LOG_GROUP_ID = '__LOG_GROUP_ID__';
 
+// Prefer .ocdk-logs.json next to this script, then cwd
+const defaultsPath = path.join(scriptDir, '.ocdk-logs.json');
+const defaultsPathCwd = path.join(process.cwd(), '.ocdk-logs.json');
+const defaultsPathToUse = fs.existsSync(defaultsPath) ? defaultsPath : defaultsPathCwd;
+if (DEBUG) {
+  const initialExec = DEFAULT_EXECUTION_LOG_ID === '__EXECUTION_LOG_ID__' ? 'placeholder' : (DEFAULT_EXECUTION_LOG_ID ? 'set' : 'empty');
+  const initialGroup = DEFAULT_LOG_GROUP_ID === '__LOG_GROUP_ID__' ? 'placeholder' : (DEFAULT_LOG_GROUP_ID ? 'set' : 'empty');
+  debug('scriptDir:', scriptDir, 'cwd:', process.cwd());
+  debug('initial in-code defaults: execution_log=', initialExec, 'log_group=', initialGroup);
+  debug('.ocdk-logs.json (script dir) exists?', fs.existsSync(defaultsPath), 'path:', defaultsPath);
+  debug('.ocdk-logs.json (cwd) exists?', fs.existsSync(defaultsPathCwd));
+  debug('using defaults path:', defaultsPathToUse);
+}
 try {
-  const defaultsPath = path.join(process.cwd(), '.ocdk-logs.json');
-  if (fs.existsSync(defaultsPath)) {
-    const raw = fs.readFileSync(defaultsPath, 'utf8');
+  if (fs.existsSync(defaultsPathToUse)) {
+    let raw = fs.readFileSync(defaultsPathToUse, 'utf8');
+    if (raw.charCodeAt(0) === 0xFEFF) raw = raw.slice(1); // strip BOM
     const parsed = JSON.parse(raw);
     if (parsed && typeof parsed === 'object') {
-      if (typeof parsed.execution_log_id === 'string') {
-        DEFAULT_EXECUTION_LOG_ID = parsed.execution_log_id;
-      }
-      if (typeof parsed.log_group_id === 'string') {
-        DEFAULT_LOG_GROUP_ID = parsed.log_group_id;
-      }
-    }
+      // Only overwrite from file when value is a non-empty string and not the placeholder (preserve in-code defaults otherwise)
+      const execId = typeof parsed.execution_log_id === 'string' ? parsed.execution_log_id.trim() : '';
+      const groupId = typeof parsed.log_group_id === 'string' ? parsed.log_group_id.trim() : '';
+      if (execId !== '' && execId !== '__EXECUTION_LOG_ID__') {
+        DEFAULT_EXECUTION_LOG_ID = execId;
+        if (DEBUG) debug('from .ocdk-logs.json: execution_log_id = non-empty');
+      } else if (DEBUG) debug('from .ocdk-logs.json: execution_log_id = empty/placeholder, keeping in-code');
+      if (groupId !== '' && groupId !== '__LOG_GROUP_ID__') {
+        DEFAULT_LOG_GROUP_ID = groupId;
+        if (DEBUG) debug('from .ocdk-logs.json: log_group_id = non-empty');
+      } else if (DEBUG) debug('from .ocdk-logs.json: log_group_id = empty/placeholder, keeping in-code');
+    } else if (DEBUG) debug('from .ocdk-logs.json: parsed not an object');
   }
 } catch (e) {
-  // ignore defaults file errors; env vars can still be used
+  if (DEBUG) debug('error reading .ocdk-logs.json:', e.message || e);
+  // ignore defaults file errors; in-code defaults or env vars can still be used
 }
 if (DEFAULT_EXECUTION_LOG_ID === '__EXECUTION_LOG_ID__') DEFAULT_EXECUTION_LOG_ID = '';
 if (DEFAULT_LOG_GROUP_ID === '__LOG_GROUP_ID__') DEFAULT_LOG_GROUP_ID = '';
+if (DEBUG) {
+  debug('final DEFAULT_EXECUTION_LOG_ID:', DEFAULT_EXECUTION_LOG_ID ? `${DEFAULT_EXECUTION_LOG_ID.slice(0, 30)}...` : '(empty)');
+  debug('final DEFAULT_LOG_GROUP_ID:', DEFAULT_LOG_GROUP_ID ? `${DEFAULT_LOG_GROUP_ID.slice(0, 30)}...` : '(empty)');
+}
 
 /**
  * Pull log entries for a given log OCID, optionally scoped by log group ID.
@@ -77,6 +110,7 @@ async function pullLogsWithLogAndGroupId({
         logGroupId: logGroupIdToUse,
         logId: resolvedLogOcid
       };
+      debug('getLog request:', { logGroupId: logGroupIdToUse.slice(0, 30) + '...', logId: resolvedLogOcid.slice(0, 30) + '...' });
       const logResponse = await loggingManagementClient.getLog(getLogRequest);
       log = logResponse.log;
       if (log) {
@@ -84,8 +118,12 @@ async function pullLogsWithLogAndGroupId({
         if (log.logGroupId) {
           logGroupIdToUse = log.logGroupId;
         }
+        debug('getLog OK; compartmentId:', compartmentId ? compartmentId.slice(0, 25) + '...' : null);
+      } else {
+        debug('getLog returned no log object');
       }
     } catch (getLogError) {
+      debug('getLog error:', getLogError.message || getLogError);
       console.error('Error in getLog call (tail_logs):', getLogError.message || getLogError);
     }
   }
@@ -129,8 +167,11 @@ async function pullLogsWithLogAndGroupId({
     limit: tail
   };
 
+  debug('searchLogs query:', searchQuery);
+  debug('searchLogs timeStart:', timeStart.toISOString(), 'timeEnd:', timeEnd.toISOString(), 'limit:', tail);
   const searchResponse = await logSearchClient.searchLogs(searchLogsRequest);
   const logEntries = searchResponse.searchResponse?.results || [];
+  debug('searchLogs raw result count:', logEntries.length);
 
   let entriesToProcess = logEntries;
   if (!searchQuery.includes(`/${resolvedLogOcid}"`)) {
@@ -141,6 +182,7 @@ async function pullLogsWithLogAndGroupId({
         entry.oracle?.logid;
       return entryLogId === resolvedLogOcid;
     });
+    debug('after filter by logid: entriesToProcess.length =', entriesToProcess.length);
   }
 
   // Map each entry to a { timestamp, message } pair using data from the log.
@@ -188,6 +230,9 @@ async function pullLogsWithLogAndGroupId({
 }
 
 async function main() {
+  if (DEBUG) {
+    debug('Debug mode on (OCI_TAIL_DEBUG=1). Loading config and resolving log IDs...');
+  }
   const configurationFilePath =
     process.env.OCI_CONFIG_FILE || '~/.oci/config';
   const profile =
@@ -207,7 +252,7 @@ async function main() {
   });
 
   const tail =
-    parseInt(process.env.OCI_LOG_TAIL || process.argv[2] || '50', 10) || 50;
+    parseInt(process.env.OCI_LOG_TAIL || process.argv[2] || '20', 10) || 20;
   const intervalMs =
     parseInt(process.env.OCI_LOG_INTERVAL_MS || '5000', 10) || 5000;
 
@@ -229,16 +274,23 @@ async function main() {
   }
   if (!effectiveLogGroupId) {
     console.error(
-      'Missing log group OCID. Set OCI_LOG_GROUP_ID (or LOG_GROUP_OCID / LOG_GROUP_ID), or configure a default for this project.'
+      'Missing log group OCID. Set OCI_LOG_GROUP_ID (or LOG_GROUP_OCID / LOG_GROUP_ID), or run "npx ocdk write-log-config" after deploy to set defaults in-code or in .ocdk-logs.json.'
     );
     process.exit(1);
   }
 
+  debug('effectiveExecutionLogId:', effectiveExecutionLogId.slice(0, 40) + '...');
+  debug('effectiveLogGroupId:', effectiveLogGroupId.slice(0, 40) + '...');
+  debug('tail:', tail, 'intervalMs:', intervalMs);
+  debug('auth: config', process.env.OCI_CONFIG_FILE || '~/.oci/config', 'profile:', process.env.OCI_CLI_PROFILE || process.env.OCI_CONFIG_PROFILE || 'DEFAULT');
+
   // Keep track of which log lines we've already printed (by timestamp+message)
   const seenKeys = new Set();
+  let pollCount = 0;
 
   // eslint-disable-next-line no-constant-condition
   while (true) {
+    pollCount += 1;
     try {
       const result = await pullLogsWithLogAndGroupId({
         tail,
@@ -247,6 +299,9 @@ async function main() {
       });
 
       const lines = result.lines || [];
+      if (DEBUG && (pollCount === 1 || lines.length > 0)) {
+        debug('poll #' + pollCount, 'lines:', lines.length, 'seenKeys.size:', seenKeys.size);
+      }
 
       // Results are newest-first from the search query; print in chronological order.
       for (let i = lines.length - 1; i >= 0; i -= 1) {
@@ -257,6 +312,7 @@ async function main() {
         console.log(`${timestamp} ${message}`);
       }
     } catch (err) {
+      debug('poll #' + pollCount, 'error:', err.message || err);
       console.error('Error while tailing logs:', err.message || err);
     }
 

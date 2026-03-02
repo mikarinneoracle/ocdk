@@ -28,55 +28,48 @@ Commands (same as CDK):
   destroy     Destroy the stack
   list        List stacks
   get                Generate provider bindings (run from project root; use ocdk get, not cdktf get)
-  redeploy:function  Rebuild function image (full Dockerfile), push to OCIR, update function (runs npm run redeploy:function in your project)
+  write-log-config   (Optional) Write .ocdk-logs.json and tail-function-logs.js to project root from terraform output
+  tail:execution-log Tail function execution logs (gets log IDs from terraform output or .ocdk-logs.json or env)
 
 Examples:
   ocdk deploy
   ocdk diff
   ocdk get
-  ocdk redeploy:function
   ocdk deploy --auto-approve
 `);
   process.exit(args[0] === '--help' || args[0] === '-h' ? 0 : 1);
 }
 
-// redeploy:function: run project script if present, else default (docker build + push from cwd)
-if (command === 'redeploy:function') {
-  const cwd = process.cwd();
-  let useProjectScript = false;
-  try {
-    const pkgPath = path.join(cwd, 'package.json');
-    if (fs.existsSync(pkgPath)) {
-      const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
-      const script = pkg.scripts && pkg.scripts['redeploy:function'];
-      useProjectScript = typeof script === 'string' && script.length > 0;
-    }
-  } catch (e) {}
-  if (useProjectScript) {
-    const result = spawnSync('npm', ['run', 'redeploy:function', '--', ...args.slice(1)], {
-      stdio: 'inherit',
-      cwd,
-      shell: true,
-      env: process.env,
-    });
-    process.exit(result.status ?? 1);
-  }
-  const defaultScript = path.join(root, 'bin', 'redeploy-function.js');
-  if (!fs.existsSync(defaultScript)) {
-    console.error('Missing script: "redeploy:function". Add it to your package.json or update @mikarinneoracle/oci-cdk (npm update @mikarinneoracle/oci-cdk).');
+// write-log-config – write .ocdk-logs.json and tail-function-logs.js from terraform output (run from project root after deploy)
+if (command === 'write-log-config') {
+  const projectDir = process.cwd();
+  const script = path.join(root, 'bin', 'write-log-config.js');
+  if (!fs.existsSync(script)) {
+    console.error('Missing script: "write-log-config". Update @mikarinneoracle/oci-cdk (npm update @mikarinneoracle/oci-cdk).');
     process.exit(1);
   }
-  const result = spawnSync('node', [defaultScript, ...args.slice(1)], {
+  const result = spawnSync('node', [script, ...args.slice(1)], {
     stdio: 'inherit',
-    cwd,
+    cwd: projectDir,
     shell: true,
     env: process.env,
   });
   process.exit(result.status ?? 1);
 }
 
-// tail:execution-log – show recent API Gateway execution log entries for the deployed stack
+// tail:execution-log – run project's tail-function-logs.js if present (uses in-code defaults / .ocdk-logs.json), else package fallback
 if (command === 'tail:execution-log') {
+  const projectDir = process.cwd();
+  const projectScript = path.join(projectDir, 'tail-function-logs.js');
+  if (fs.existsSync(projectScript)) {
+    const result = spawnSync('node', [projectScript, ...args.slice(1)], {
+      stdio: 'inherit',
+      cwd: projectDir,
+      shell: true,
+      env: process.env,
+    });
+    process.exit(result.status ?? 1);
+  }
   const script = path.join(root, 'bin', 'tail-execution-log.js');
   if (!fs.existsSync(script)) {
     console.error('Missing script: "tail:execution-log". Update @mikarinneoracle/oci-cdk (npm update @mikarinneoracle/oci-cdk).');
@@ -84,7 +77,7 @@ if (command === 'tail:execution-log') {
   }
   const result = spawnSync('node', [script, ...args.slice(1)], {
     stdio: 'inherit',
-    cwd: root,
+    cwd: projectDir,
     shell: true,
     env: process.env,
   });

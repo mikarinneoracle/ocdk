@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
- * Verify that the built package contains the latest WriteOutputsToProject logic
- * (runs generate_tail_log.sh via local-exec). Fails prepublishOnly if stale.
+ * Verify built package and prepublish: README present, stack and config valid.
+ * Log config is written by: npx ocdk write-log-config (after deploy).
  */
 const fs = require('fs');
 const path = require('path');
@@ -13,7 +13,15 @@ const configPath = path.join(root, 'lib', 'config', 'oci-config.js');
 
 let failed = false;
 
-// 0. README.md must exist at package root so it appears on npm
+// 0. package.json "files" must include README.md so it is deployed with the package
+const pkgPath = path.join(root, 'package.json');
+const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
+if (!Array.isArray(pkg.files) || !pkg.files.includes('README.md')) {
+  console.error('[verify-publish] package.json "files" must include "README.md" so README is deployed to npm.');
+  failed = true;
+}
+
+// 1. README.md must exist at package root so it appears on npm
 if (!fs.existsSync(readmePath)) {
   console.error('[verify-publish] README.md not found at package root. It must be included for npm.');
   failed = true;
@@ -30,23 +38,13 @@ if (!fs.existsSync(readmePath)) {
   }
 }
 
-// 1. Built stack must run generate_tail_log.sh (GENERATE_TAIL_LOG_SCRIPT_B64)
-if (fs.existsSync(stackPath)) {
-  const stack = fs.readFileSync(stackPath, 'utf8');
-  if (!stack.includes('GENERATE_TAIL_LOG_SCRIPT_B64') || !stack.includes('generate_tail_log')) {
-    console.error('[verify-publish] lib/lib/oci-stack.js missing generate_tail_log.sh run (GENERATE_TAIL_LOG_SCRIPT_B64). Rebuild with latest source.');
-    failed = true;
-  }
-  if (stack.includes('tailScriptB64Encoded')) {
-    console.error('[verify-publish] lib/lib/oci-stack.js still has old base64 tail script (tailScriptB64Encoded). Use generate_tail_log.sh.');
-    failed = true;
-  }
-} else {
+// 2. Built stack must exist
+if (!fs.existsSync(stackPath)) {
   console.error('[verify-publish] lib/lib/oci-stack.js not found. Run npm run compile first.');
   failed = true;
 }
 
-// 2. Config must create tail script in Node (ensureTailFunctionLogsScript)
+// 3. Config must create tail script in Node (ensureTailFunctionLogsScript)
 if (fs.existsSync(configPath)) {
   const config = fs.readFileSync(configPath, 'utf8');
   if (!config.includes('ensureTailFunctionLogsScript') || !config.includes('tail-function-logs.js')) {
@@ -58,5 +56,20 @@ if (fs.existsSync(configPath)) {
   failed = true;
 }
 
+// 4. Ensure README.md is in the pack (npm pack --dry-run) so it appears on npm
+if (!failed) {
+  const { execSync } = require('child_process');
+  try {
+    const out = execSync('npm pack --dry-run 2>&1', { encoding: 'utf8', cwd: root });
+    if (!out.includes('README.md')) {
+      console.error('[verify-publish] npm pack --dry-run did not list README.md. Fix .npmignore / package.json "files".');
+      failed = true;
+    }
+  } catch (e) {
+    console.error('[verify-publish] npm pack --dry-run failed:', e.message);
+    failed = true;
+  }
+}
+
 if (failed) process.exit(1);
-console.log('[@mikarinneoracle/oci-cdk] verify-publish: built package has latest tail script logic.');
+console.log('[@mikarinneoracle/oci-cdk] verify-publish: README in pack, stack and config OK.');

@@ -1,0 +1,73 @@
+# Publish @mikarinneoracle/oci-cdk to npm using Trusted Publishing (OIDC).
+# Runs on every push to main: bumps patch version, commits, pushes, and publishes.
+# No NPM_TOKEN secret needed. Configure the Trusted Publisher on npm first:
+#   https://docs.npmjs.com/trusted-publishers
+#   Package → Configure → Trusted Publishers → Add GitHub Actions
+#   Workflow file: publish.yml, Repository: <owner>/ocdk, Ref: main (or default branch).
+
+name: Publish to npm
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Skip if this is a release commit
+        id: skip
+        run: |
+          if git log -1 --pretty=%B | grep -q "chore(release):"; then
+            echo "skip=true" >> $GITHUB_OUTPUT
+          else
+            echo "skip=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Setup Node.js
+        if: steps.skip.outputs.skip != 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Install dependencies
+        if: steps.skip.outputs.skip != 'true'
+        run: npm ci
+
+      - name: Bump version
+        if: steps.skip.outputs.skip != 'true'
+        run: npm version patch --no-git-tag-version
+
+      - name: Get new version
+        if: steps.skip.outputs.skip != 'true'
+        id: version
+        run: echo "version=$(node -p "require('./package.json').version")" >> $GITHUB_OUTPUT
+
+      - name: Commit and push version bump
+        if: steps.skip.outputs.skip != 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add package.json
+          git commit -m "chore(release): v${{ steps.version.outputs.version }}"
+          git push "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" HEAD:main
+
+      # Trusted Publishing requires npm 11.5.1+
+      - name: Use npm for Trusted Publishing
+        if: steps.skip.outputs.skip != 'true'
+        run: npm install -g npm@latest
+
+      - name: Publish to npm
+        if: steps.skip.outputs.skip != 'true'
+        run: npm publish --provenance --access public

@@ -99,9 +99,9 @@ export class OciStack extends TerraformStack {
       tenancyOcid: config.tenancyId,
     });
 
-    // OCI_STACK_ACTION: "function" => no API Gateway; "api-gateway" or unset => full stack including API Gateway.
+    // OCI_STACK_ACTION: "function-only" (or legacy "function") => no API Gateway; "full-stack" or unset => full stack including API Gateway.
     const stackActionRaw = (process.env.OCI_STACK_ACTION || '').trim().toLowerCase();
-    const stackAction = stackActionRaw === 'function' ? 'function' : 'api-gateway';
+    const stackAction = stackActionRaw === 'function-only' || stackActionRaw === 'function' ? 'function-only' : 'full-stack';
 
     // OCIR Container Repository (root compartment allowed if explicitly set).
     const ocirCompartmentId = config.ocirCompartmentId || config.compartmentId;
@@ -129,8 +129,8 @@ export class OciStack extends TerraformStack {
       const appName = config.functionAppName || config.functionName!;
       const resourceName = appName;
 
-      const privateSubnetIdFromEnv = (process.env.OCI_PRIVATE_SUBNET_ID || process.env.OCI_PRIVATE_SUBNET_OCID || '').trim();
-      const publicSubnetIdFromEnv = (process.env.OCI_PUBLIC_SUBNET_ID || process.env.OCI_PUBLIC_SUBNET_OCID || '').trim();
+      const privateSubnetIdFromEnv = (process.env.OCI_PRIVATE_SUBNET_ID || process.env.OCI_PRIVATE_SUBNET_OCID || process.env.OCI_FUNCTION_SUBNET_ID || '').trim();
+      const publicSubnetIdFromEnv = (process.env.OCI_PUBLIC_SUBNET_ID || process.env.OCI_PUBLIC_SUBNET_OCID || process.env.OCI_APIGATEWAY_SUBNET_ID || '').trim();
 
       this.addOverride('terraform.required_providers.null', {
         source: 'hashicorp/null',
@@ -160,7 +160,7 @@ export class OciStack extends TerraformStack {
       const runtime = config.runtime?.toLowerCase();
       let dockerfileContent: string;
       if (runtime && runtime.startsWith('python')) {
-        dockerfileContent = `FROM fnproject/python:3.11-dev as build-stage
+        dockerfileContent = `FROM docker.io/fnproject/python:3.11-dev as build-stage
 WORKDIR /function
 ADD requirements.txt /function/
 RUN pip3 install --target /python/ --no-cache --no-cache-dir -r requirements.txt && \\
@@ -168,7 +168,7 @@ RUN pip3 install --target /python/ --no-cache --no-cache-dir -r requirements.txt
     chmod -R o+r /python
 ADD . /function/
 RUN rm -fr /function/.pip_cache
-FROM fnproject/python:3.11
+FROM docker.io/fnproject/python:3.11
 WORKDIR /function
 COPY --from=build-stage /python /python
 COPY --from=build-stage /function /function
@@ -176,20 +176,32 @@ RUN chmod -R o+r /function
 ENV PYTHONPATH=/function:/python
 ENTRYPOINT ["/python/bin/fdk", "/function/func.py", "handler"]
 `;
+      } else if (runtime && runtime.startsWith('node')) {
+        dockerfileContent = `FROM docker.io/fnproject/node:20-dev as build-stage
+WORKDIR /function
+ADD package.json /function/
+RUN npm install  && chown -R $(id -u):$(id -g) node_modules
+FROM docker.io/fnproject/node:20
+WORKDIR /function
+ADD . /function/
+COPY --from=build-stage /function/node_modules/ /function/node_modules/
+RUN chmod -R o+r /function
+ENTRYPOINT ["node", "func.js"]
+`;
       } else {
-        const dockerfileContentThin = `FROM fnproject/fn-java-fdk:jre17-1.1.5
+        const dockerfileContentThin = `FROM docker.io/fnproject/fn-java-fdk:jre17-1.1.5
 WORKDIR /function
 COPY target/*.jar /function/app/
 CMD ["${handler.replace(/"/g, '\\"')}"]
 `;
-        const dockerfileContentFull = `FROM fnproject/fn-java-fdk-build:jdk17-1.1.5 as build-stage
+        const dockerfileContentFull = `FROM docker.io/fnproject/fn-java-fdk-build:jdk17-1.1.5 as build-stage
 WORKDIR /function
 ENV MAVEN_OPTS -Dhttp.proxyHost= -Dhttp.proxyPort= -Dhttps.proxyHost= -Dhttps.proxyPort= -Dhttp.nonProxyHosts= -Dmaven.repo.local=/usr/share/maven/ref/repository
 ADD pom.xml /function/pom.xml
 RUN ["mvn", "package", "dependency:copy-dependencies", "-DincludeScope=runtime", "-DskipTests=true", "-Dmdep.prependGroupId=true", "-DoutputDirectory=target", "--fail-never"]
 ADD src /function/src
 RUN ["mvn", "package"]
-FROM fnproject/fn-java-fdk:jre17-1.1.5
+FROM docker.io/fnproject/fn-java-fdk:jre17-1.1.5
 WORKDIR /function
 COPY --from=build-stage /function/target/*.jar /function/app/
 CMD ["${handler.replace(/"/g, '\\"')}"]
@@ -228,9 +240,9 @@ tail-function-logs.js
 
       let publicSubnet: CoreSubnet | undefined;
       let privateSubnet: CoreSubnet | undefined;
-      // Function-only: create VCN only when we need to create the private subnet. API Gateway: create when we need either subnet.
+      // Function-only: create VCN only when we need to create the private subnet. Full-stack: create when we need either subnet.
       const createNetworking =
-        stackAction === 'function'
+        stackAction === 'function-only'
           ? !privateSubnetIdFromEnv
           : !privateSubnetIdFromEnv || !publicSubnetIdFromEnv;
       if (createNetworking) {
@@ -240,7 +252,7 @@ tail-function-logs.js
           cidrBlocks: ['10.0.0.0/16'],
           dnsLabel: 'appfn',
         });
-        if (stackAction === 'api-gateway' && !publicSubnetIdFromEnv) {
+        if (stackAction === 'full-stack' && !publicSubnetIdFromEnv) {
           publicSubnet = new CoreSubnet(this, 'PublicSubnet', {
             compartmentId: config.compartmentId,
             vcnId: vcn.id,
@@ -318,7 +330,7 @@ tail-function-logs.js
       const publicSubnetIdForApiGw = publicSubnetIdFromEnv || (publicSubnet?.id ?? '');
 
       let apiGateway: ApigatewayGateway | undefined;
-      if (stackAction === 'api-gateway' && publicSubnetIdForApiGw) {
+      if (stackAction === 'full-stack' && publicSubnetIdForApiGw) {
         apiGateway = new ApigatewayGateway(this, 'ApiGateway', {
           compartmentId: config.compartmentId,
           subnetId: publicSubnetIdForApiGw,
@@ -345,7 +357,7 @@ tail-function-logs.js
         ...(config.functionConfig && Object.keys(config.functionConfig).length > 0 ? { config: config.functionConfig } : {}),
       });
       ociFunction.addOverride('depends_on', [`null_resource.${buildAndPushImageId}`]);
-      if (stackAction === 'api-gateway' && apiGateway) {
+      if (stackAction === 'full-stack' && apiGateway) {
         const pathPrefix = config.apiGwPathPrefix ?? '/';
         let routes: Array<{ path: string; methods: string[]; backend: { type: string; functionId: typeof ociFunction.id; readTimeoutInSeconds?: number } }>;
         if (config.apiGwDeploymentJsonPath && fs.existsSync(config.apiGwDeploymentJsonPath)) {

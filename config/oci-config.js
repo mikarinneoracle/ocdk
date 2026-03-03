@@ -267,9 +267,10 @@ function getFuncYamlConfig(projectDir) {
         return undefined;
     }
 }
-/** Ensure oci_apigateway_deployment.json exists in projectDir; write default if missing. Skip when OCI_STACK_ACTION=function. Returns path. */
+/** Ensure oci_apigateway_deployment.json exists in projectDir; write default if missing. Skip when OCI_STACK_ACTION=function-only. Returns path. */
 function ensureDefaultApiGwDeploymentJson(projectDir) {
-    if ((process.env.OCI_STACK_ACTION || '').trim().toLowerCase() === 'function') {
+    const action = (process.env.OCI_STACK_ACTION || '').trim().toLowerCase();
+    if (action === 'function-only' || action === 'function') {
         return path.join(projectDir, 'oci_apigateway_deployment.json');
     }
     const p = path.join(projectDir, 'oci_apigateway_deployment.json');
@@ -574,10 +575,18 @@ async function getOciConfig() {
     if (functionConfig && Object.keys(functionConfig).length === 0)
         functionConfig = undefined;
     const apiGwDeploymentJsonEnv = process.env.OCI_APIGATEWAY_DEPLOYMENT_JSON?.trim();
-    const stackAction = (process.env.OCI_STACK_ACTION || '').trim().toLowerCase();
+    const stackActionRaw = (process.env.OCI_STACK_ACTION || '').trim().toLowerCase();
+    const stackAction = stackActionRaw === 'function-only' || stackActionRaw === 'function' ? 'function-only' : 'full-stack';
+    if (stackAction !== 'function-only') {
+        const privateSubnetSet = !!(process.env.OCI_PRIVATE_SUBNET_ID || process.env.OCI_PRIVATE_SUBNET_OCID || process.env.OCI_FUNCTION_SUBNET_ID || '').trim();
+        const publicSubnetSet = !!(process.env.OCI_PUBLIC_SUBNET_ID || process.env.OCI_PUBLIC_SUBNET_OCID || process.env.OCI_APIGATEWAY_SUBNET_ID || '').trim();
+        if (privateSubnetSet !== publicSubnetSet) {
+            throw new Error('For OCI_STACK_ACTION=full-stack, when using existing subnets both function subnet (OCI_PRIVATE_SUBNET_ID/OCI_FUNCTION_SUBNET_ID) and API Gateway subnet (OCI_PUBLIC_SUBNET_ID/OCI_APIGATEWAY_SUBNET_ID) must be set, or neither.');
+        }
+    }
     const apiGwDeploymentJsonPath = apiGwDeploymentJsonEnv
         ? path.resolve(apiGwDeploymentJsonEnv)
-        : stackAction === 'function'
+        : stackAction === 'function-only'
             ? undefined
             : dockerContextPath
                 ? ensureDefaultApiGwDeploymentJson(dockerContextPath)

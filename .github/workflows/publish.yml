@@ -125,6 +125,7 @@ jobs:
           mkdir -p function && cd function
           fn init --runtime node
           fn build -v 2>&1 | tee ../fnbuild.log
+          grep -q 'fnproject/node' ../fnbuild.log || (echo "fn build did not output Node Dockerfile" && exit 1)
           cd ..
           sed -n '/^-----------------------------------$/,/^-----------------------------------$/p' fnbuild.log | tail -n +2 | head -n -1 > function/Dockerfile
           echo "Extracted Node Dockerfile:"

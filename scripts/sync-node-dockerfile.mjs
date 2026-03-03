@@ -70,6 +70,15 @@ if (!fs.existsSync(fnDockerfilePath)) {
 }
 
 const fnDockerfile = fs.readFileSync(fnDockerfilePath, 'utf8');
+// Refuse to use Python Dockerfile in Node block (e.g. if function/ wasn't regenerated for node)
+if (/fnproject\/python|func\.py|python\/bin\/fdk/.test(fnDockerfile)) {
+  console.error('function/Dockerfile looks like Python, not Node (run fn init --runtime node first)');
+  process.exit(2);
+}
+if (!/fnproject\/node|ENTRYPOINT.*func\.js/.test(fnDockerfile)) {
+  console.error('function/Dockerfile does not look like Node (expected fnproject/node and func.js)');
+  process.exit(2);
+}
 let ociStack = fs.readFileSync(ociStackPath, 'utf8');
 
 const markerStart = "        dockerfileContent = `";

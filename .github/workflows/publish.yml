@@ -1,9 +1,13 @@
 # Publish @mikarinneoracle/oci-cdk to npm using Trusted Publishing (OIDC).
 # Runs on every push to main: bumps patch version, commits, pushes, and publishes.
-# No NPM_TOKEN secret needed. Configure the Trusted Publisher on npm first:
+#
+# One-time npm setup (fixes 404 / "token expired" if not done):
+#   1. npmjs.com → your org @mikarinneoracle → Packages → create/link oci-cdk, set Access: Public
+#   2. Package page → Automation → Trusted publishers → Add GitHub Actions
+#      Repository: mikarinneoracle/ocdk
+#      Workflow file: .github/workflows/publish.yml
+#      Ref (branch): main
 #   https://docs.npmjs.com/trusted-publishers
-#   Package → Configure → Trusted Publishers → Add GitHub Actions
-#   Workflow file: publish.yml, Repository: <owner>/ocdk, Ref: main (or default branch).
 
 name: Publish to npm
 
@@ -40,6 +44,10 @@ jobs:
         with:
           node-version: '22'
           registry-url: 'https://registry.npmjs.org'
+
+      - name: Clear deprecated npm config
+        if: steps.skip.outputs.skip != 'true'
+        run: npm config delete always-auth 2>/dev/null || true
 
       - name: Install dependencies
         if: steps.skip.outputs.skip != 'true'

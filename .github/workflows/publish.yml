@@ -58,16 +58,32 @@ jobs:
           rm -rf function
           mkdir -p function && cd function
           fn init --runtime java
-          fn build -v
+          fn build -v 2>&1 | tee ../fnbuild.log
+          cd ..
+          # Extract Dockerfile from fn build -v output (between ----------------------------------- lines)
+          sed -n '/^-----------------------------------$/,/^-----------------------------------$/p' fnbuild.log | tail -n +2 | head -n -1 > function/Dockerfile
+          echo "Extracted Dockerfile:"
+          cat function/Dockerfile
+          rm -f fnbuild.log
 
       - name: Sync Java Dockerfile with oci-stack.ts
         id: sync
         run: |
+          set +e
           out=$(node scripts/sync-java-dockerfile.mjs 2>&1)
+          code=$?
+          set -e
           echo "$out"
+          if [ "$code" -eq 2 ]; then
+            echo "Sync skipped (function/Dockerfile missing or markers not found), continuing."
+            result="unchanged"
+          else
+            result=$(echo "$out" | tail -1)
+          fi
           echo "result<<EOF" >> $GITHUB_OUTPUT
-          echo "$out" | tail -1 >> $GITHUB_OUTPUT
+          echo "$result" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
+          [ "$code" -eq 0 ] || [ "$code" -eq 2 ] || exit "$code"
 
       - name: Remove function dir before commit
         run: rm -rf function

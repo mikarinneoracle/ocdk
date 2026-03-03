@@ -526,7 +526,11 @@ const backendConfig = backendType === 'local'
  */
 async function getOciConfig() {
     const cliConfig = readTenancyAndRegionFromCliConfig();
-    const compartmentId = process.env.OCI_COMPARTMENT_ID?.trim() || 'ocid1.compartment.oc1..aaaaaaa...';
+    const compartmentIdRaw = (process.env.OCI_COMPARTMENT_ID || process.env.OCI_COMPARTMENT_OCID || '').trim();
+    if (!compartmentIdRaw || compartmentIdRaw === 'ocid1.compartment.oc1..aaaaaaa...') {
+        throw new Error('OCI_COMPARTMENT_ID (or OCI_COMPARTMENT_OCID) is required.');
+    }
+    const compartmentId = compartmentIdRaw;
     const ocirCompartmentId = process.env.OCI_OCIR_COMPARTMENT_ID?.trim() || process.env.OCI_COMPARTMENT_ID?.trim() || compartmentId;
     const tenancyId = process.env.OCI_TENANCY_ID?.trim() || cliConfig.tenancy?.trim() || 'ocid1.tenancy.oc1..aaaaaaa...';
     const region = process.env.OCI_REGION?.trim() || cliConfig.region?.trim() || 'eu-frankfurt-1';

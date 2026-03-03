@@ -1,6 +1,6 @@
 # @mikarinneoracle/oci-cdk
 
-OCI Functions, API Gateway, and related infrastructure via Terraform CDK. Run from your project root with `npx ocdk`.
+OCI Functions (Java, Python, Node.js), API Gateway, and related infrastructure via Terraform CDK. Run from your project root with `npx ocdk`.
 
 ## Required
 

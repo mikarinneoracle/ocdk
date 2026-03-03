@@ -180,6 +180,10 @@ ENTRYPOINT ["/python/bin/fdk", "/function/func.py", "handler"]
         dockerfileContent = `FROM docker.io/fnproject/node:20-dev as build-stage
 WORKDIR /function
 ADD package.json /function/
+RUN sed '\\|"@mikarinneoracle/oci-cdk": ".*"|d' /function/package.json > /function/package_cleaned.json
+RUN cat /function/package_cleaned.json
+RUN sed 's!\\("@fnproject/fdk": "[^"]*"\\),!\\1!' /function/package_cleaned.json > /function/package.json
+RUN cat /function/package.json
 RUN npm install  && chown -R $(id -u):$(id -g) node_modules
 FROM docker.io/fnproject/node:20
 WORKDIR /function

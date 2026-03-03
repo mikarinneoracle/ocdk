@@ -477,15 +477,18 @@ function discoverFromFuncYamlAndTarget() {
         return {};
     const nameFromYaml = getFuncYamlName(projectDir);
     const runtime = getFuncYamlRuntime(projectDir);
-    const isPython = runtime?.toLowerCase().startsWith('python') ?? false;
+    const runtimeLower = (runtime?.toLowerCase() || '');
+    const isPython = runtimeLower.startsWith('python');
+    const isNode = runtimeLower.startsWith('node');
     const jarPath = findJarInTarget(projectDir, nameFromYaml || undefined);
     const hasSource = hasPomAndSrc(projectDir);
-    if (!isPython && !jarPath && !hasSource)
+    // Java: require JAR or Maven source layout. Python/Node: allow source-only projects (Dockerfile is generated).
+    if (!isPython && !isNode && !jarPath && !hasSource)
         return {};
     const functionName = process.env.OCI_FUNCTION_NAME?.trim() || nameFromYaml || path.basename(projectDir) || 'oci-function';
     const imageTag = process.env.OCI_IMAGE_TAG?.trim() || getFuncYamlVersion(projectDir);
     const handler = process.env.OCI_FUNCTION_HANDLER?.trim() || getFuncYamlHandler(projectDir);
-    const useThinDockerfile = isPython ? false : !!jarPath;
+    const useThinDockerfile = isPython || isNode ? false : !!jarPath;
     const memoryMb = getFuncYamlMemory(projectDir);
     const timeoutSeconds = getFuncYamlTimeout(projectDir);
     const config = getFuncYamlConfig(projectDir);

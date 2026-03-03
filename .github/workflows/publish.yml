@@ -53,6 +53,37 @@ jobs:
           curl -LSs https://raw.githubusercontent.com/fnproject/cli/master/install | sh
           fn version
 
+      - name: Generate Java Dockerfile with fn CLI
+        run: |
+          rm -rf function
+          mkdir -p function && cd function
+          fn init --runtime java
+          fn build -v
+
+      - name: Sync Java Dockerfile with oci-stack.ts
+        id: sync
+        run: |
+          out=$(node scripts/sync-java-dockerfile.mjs 2>&1)
+          echo "$out"
+          echo "result<<EOF" >> $GITHUB_OUTPUT
+          echo "$out" | tail -1 >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Remove function dir before commit
+        run: rm -rf function
+
+      - name: Bump version and push if Dockerfile was updated
+        if: steps.sync.outputs.result == 'updated'
+        run: |
+          npm version patch --no-git-tag-version
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add lib/oci-stack.ts package.json
+          git status
+          git diff --cached --stat
+          git commit -m "chore: sync Java Dockerfile with fn CLI [skip ci]" || true
+          git push "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" HEAD:main || true
+
       # Trusted Publishing requires npm 11.5.1+
       - name: Use npm for Trusted Publishing
         run: npm install -g npm@latest

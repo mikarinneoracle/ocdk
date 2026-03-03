@@ -160,15 +160,16 @@ export class OciStack extends TerraformStack {
       const runtime = config.runtime?.toLowerCase();
       let dockerfileContent: string;
       if (runtime && runtime.startsWith('python')) {
-        dockerfileContent = `FROM docker.io/fnproject/python:3.11-dev as build-stage
+        dockerfileContent = `FROM docker.io/fnproject/python:3.12-dev as build-stage
 WORKDIR /function
 ADD requirements.txt /function/
-RUN pip3 install --target /python/ --no-cache --no-cache-dir -r requirements.txt && \\
-    rm -fr ~/.cache/pip /tmp* requirements.txt func.yaml Dockerfile .venv && \\
-    chmod -R o+r /python
+
+			RUN pip3 install --target /python/  --no-cache --no-cache-dir -r requirements.txt &&\
+			    rm -fr ~/.cache/pip /tmp* requirements.txt func.yaml Dockerfile .venv &&\
+			    chmod -R o+r /python
 ADD . /function/
 RUN rm -fr /function/.pip_cache
-FROM docker.io/fnproject/python:3.11
+FROM docker.io/fnproject/python:3.12
 WORKDIR /function
 COPY --from=build-stage /python /python
 COPY --from=build-stage /function /function

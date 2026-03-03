@@ -154,8 +154,17 @@ jobs:
       - name: Remove function dir before commit
         run: rm -rf function
 
+      - name: Set version_bumped flag
+        id: version_flag
+        run: |
+          if [ "${{ steps.sync_java.outputs.result }}" = "updated" ] || [ "${{ steps.sync_python.outputs.result }}" = "updated" ] || [ "${{ steps.sync_node.outputs.result }}" = "updated" ]; then
+            echo "version_bumped=true" >> $GITHUB_OUTPUT
+          else
+            echo "version_bumped=false" >> $GITHUB_OUTPUT
+          fi
+
       - name: Bump version and push if Dockerfile was updated
-        if: steps.sync_java.outputs.result == 'updated' || steps.sync_python.outputs.result == 'updated' || steps.sync_node.outputs.result == 'updated'
+        if: steps.version_flag.outputs.version_bumped == 'true'
         run: |
           npm version patch --no-git-tag-version
           git config user.name "github-actions[bot]"
@@ -168,7 +177,9 @@ jobs:
 
       # Trusted Publishing requires npm 11.5.1+
       - name: Use npm for Trusted Publishing
+        if: steps.version_flag.outputs.version_bumped == 'true'
         run: npm install -g npm@latest
 
       - name: Publish to npm
+        if: steps.version_flag.outputs.version_bumped == 'true'
         run: npm publish --provenance --access public

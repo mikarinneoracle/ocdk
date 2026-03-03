@@ -63,6 +63,7 @@ Run from your project root (where your `func.yaml` / function code and `node_mod
 ```bash
 npx ocdk deploy
 npx ocdk tail:execution-log
+npx ocdk destroy
 ```
 
 - **`npx ocdk deploy`** – Deploy the stack. Options (e.g. `--auto-approve`) are passed through.

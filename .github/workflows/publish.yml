@@ -16,6 +16,8 @@ on:
     branches:
       - main
   workflow_dispatch:
+  schedule:
+    - cron: '0 0 * * *'   # midnight UTC every day
 
 permissions:
   id-token: write
@@ -40,6 +42,11 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+
+      - name: Install Fn CLI
+        run: |
+          curl -LSs https://raw.githubusercontent.com/fnproject/cli/master/install | sh
+          fn version
 
       # Trusted Publishing requires npm 11.5.1+
       - name: Use npm for Trusted Publishing

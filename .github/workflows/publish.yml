@@ -67,7 +67,7 @@ jobs:
           rm -f fnbuild.log
 
       - name: Sync Java Dockerfile with oci-stack.ts
-        id: sync
+        id: sync_java
         run: |
           set +e
           out=$(node scripts/sync-java-dockerfile.mjs 2>&1)
@@ -75,7 +75,41 @@ jobs:
           set -e
           echo "$out"
           if [ "$code" -eq 2 ]; then
-            echo "Sync skipped (function/Dockerfile missing or markers not found), continuing."
+            echo "Java sync skipped (function/Dockerfile missing or markers not found), continuing."
+            result="unchanged"
+          else
+            result=$(echo "$out" | tail -1)
+          fi
+          echo "result<<EOF" >> $GITHUB_OUTPUT
+          echo "$result" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+          [ "$code" -eq 0 ] || [ "$code" -eq 2 ] || exit "$code"
+
+      - name: Remove function dir
+        run: rm -rf function
+
+      - name: Generate Python Dockerfile with fn CLI
+        run: |
+          rm -rf function
+          mkdir -p function && cd function
+          fn init --runtime python
+          fn build -v 2>&1 | tee ../fnbuild.log
+          cd ..
+          sed -n '/^-----------------------------------$/,/^-----------------------------------$/p' fnbuild.log | tail -n +2 | head -n -1 > function/Dockerfile
+          echo "Extracted Python Dockerfile:"
+          cat function/Dockerfile
+          rm -f fnbuild.log
+
+      - name: Sync Python Dockerfile with oci-stack.ts
+        id: sync_python
+        run: |
+          set +e
+          out=$(node scripts/sync-python-dockerfile.mjs 2>&1)
+          code=$?
+          set -e
+          echo "$out"
+          if [ "$code" -eq 2 ]; then
+            echo "Python sync skipped (function/Dockerfile missing or markers not found), continuing."
             result="unchanged"
           else
             result=$(echo "$out" | tail -1)
@@ -89,7 +123,7 @@ jobs:
         run: rm -rf function
 
       - name: Bump version and push if Dockerfile was updated
-        if: steps.sync.outputs.result == 'updated'
+        if: steps.sync_java.outputs.result == 'updated' || steps.sync_python.outputs.result == 'updated'
         run: |
           npm version patch --no-git-tag-version
           git config user.name "github-actions[bot]"
@@ -97,7 +131,7 @@ jobs:
           git add lib/oci-stack.ts package.json
           git status
           git diff --cached --stat
-          git commit -m "chore: sync Java Dockerfile with fn CLI [skip ci]" || true
+          git commit -m "chore: sync Java/Python Dockerfile with fn CLI [skip ci]" || true
           git push "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" HEAD:main || true
 
       # Trusted Publishing requires npm 11.5.1+

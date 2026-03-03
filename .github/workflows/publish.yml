@@ -119,11 +119,42 @@ jobs:
           echo "EOF" >> $GITHUB_OUTPUT
           [ "$code" -eq 0 ] || [ "$code" -eq 2 ] || exit "$code"
 
+      - name: Generate Node Dockerfile with fn CLI
+        run: |
+          rm -rf function
+          mkdir -p function && cd function
+          fn init --runtime node
+          fn build -v 2>&1 | tee ../fnbuild.log
+          cd ..
+          sed -n '/^-----------------------------------$/,/^-----------------------------------$/p' fnbuild.log | tail -n +2 | head -n -1 > function/Dockerfile
+          echo "Extracted Node Dockerfile:"
+          cat function/Dockerfile
+          rm -f fnbuild.log
+
+      - name: Sync Node Dockerfile with oci-stack.ts
+        id: sync_node
+        run: |
+          set +e
+          out=$(node scripts/sync-node-dockerfile.mjs 2>&1)
+          code=$?
+          set -e
+          echo "$out"
+          if [ "$code" -eq 2 ]; then
+            echo "Node sync skipped (function/Dockerfile missing or markers not found), continuing."
+            result="unchanged"
+          else
+            result=$(echo "$out" | tail -1)
+          fi
+          echo "result<<EOF" >> $GITHUB_OUTPUT
+          echo "$result" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+          [ "$code" -eq 0 ] || [ "$code" -eq 2 ] || exit "$code"
+
       - name: Remove function dir before commit
         run: rm -rf function
 
       - name: Bump version and push if Dockerfile was updated
-        if: steps.sync_java.outputs.result == 'updated' || steps.sync_python.outputs.result == 'updated'
+        if: steps.sync_java.outputs.result == 'updated' || steps.sync_python.outputs.result == 'updated' || steps.sync_node.outputs.result == 'updated'
         run: |
           npm version patch --no-git-tag-version
           git config user.name "github-actions[bot]"
@@ -131,7 +162,7 @@ jobs:
           git add lib/oci-stack.ts package.json
           git status
           git diff --cached --stat
-          git commit -m "chore: sync Java/Python Dockerfile with fn CLI [skip ci]" || true
+          git commit -m "chore: sync Java/Python/Node Dockerfile with fn CLI [skip ci]" || true
           git push "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" HEAD:main || true
 
       # Trusted Publishing requires npm 11.5.1+

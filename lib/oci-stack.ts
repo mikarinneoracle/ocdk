@@ -271,7 +271,7 @@ ENTRYPOINT ["node", "func.js"]
               fs.writeFileSync(reflectionTargetPath, GRAALVM_REFLECTION_JSON, 'utf8');
             }
 
-            // Ensure pom.xml has runtime dependency and GraalVM build block
+            // Ensure pom.xml has runtime dependency for GraalVM native image
             const projectPomPath = path.join(functionCodePath, 'pom.xml');
             if (fs.existsSync(projectPomPath)) {
               let pomContent = fs.readFileSync(projectPomPath, 'utf8');
@@ -279,15 +279,6 @@ ENTRYPOINT ["node", "func.js"]
               if (!pomContent.includes('<artifactId>runtime</artifactId>') && pomContent.includes('</dependencies>')) {
                 pomContent = pomContent.replace('</dependencies>', `${GRAALVM_POM_RUNTIME_DEP}    </dependencies>`);
               }
-
-              if (pomContent.includes('<build>')) {
-                const buildBlockRegex = new RegExp('<build>[\\\\s\\\\S]*?<\\\\/build>');
-                pomContent = pomContent.replace(buildBlockRegex, GRAALVM_POM_BUILD_BLOCK);
-              } else if (pomContent.includes('</project>')) {
-                pomContent = pomContent.replace('</project>', `  ${GRAALVM_POM_BUILD_BLOCK}
-</project>`);
-              }
-
               fs.writeFileSync(projectPomPath, pomContent, 'utf8');
             }
           } catch {

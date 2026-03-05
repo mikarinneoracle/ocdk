@@ -225,7 +225,7 @@ export class OciStack extends TerraformStack {
       const handler = config.handler || 'com.example.fn.HelloFunction::handleRequest';
       const useThin = config.useThinDockerfile === true;
       const runtime = config.runtime?.toLowerCase();
-      let dockerfileContent: string;
+      let dockerfileContent = '';
       if (runtime && runtime.startsWith('python')) {
         dockerfileContent = `FROM docker.io/fnproject/python:3.12-dev as build-stage
 WORKDIR /function
@@ -281,7 +281,8 @@ ENTRYPOINT ["node", "func.js"]
               }
 
               if (pomContent.includes('<build>')) {
-                pomContent = pomContent.replace(/<build>[\\s\\S]*?<\\/build>/, GRAALVM_POM_BUILD_BLOCK);
+                const buildBlockRegex = new RegExp('<build>[\\\\s\\\\S]*?<\\\\/build>');
+                pomContent = pomContent.replace(buildBlockRegex, GRAALVM_POM_BUILD_BLOCK);
               } else if (pomContent.includes('</project>')) {
                 pomContent = pomContent.replace('</project>', `  ${GRAALVM_POM_BUILD_BLOCK}
 </project>`);

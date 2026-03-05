@@ -169,7 +169,7 @@ jobs:
           echo "version_bumped=${bumped}" >> $GITHUB_OUTPUT
 
       - name: Bump version and push if Dockerfile was updated
-        if: steps.version_flag.outputs.version_bumped == 'true'
+        if: steps.sync_java.outputs.result == 'updated' || steps.sync_python.outputs.result == 'updated' || steps.sync_node.outputs.result == 'updated'
         run: |
           npm version patch --no-git-tag-version
           git config user.name "github-actions[bot]"

@@ -19,6 +19,73 @@ import { OciBackendConfig, ocirHostKey, getOciImageUrl } from '../config/oci-con
 import * as fs from 'fs';
 import * as path from 'path';
 
+const GRAALVM_JAVA_DOCKERFILE = `FROM fnproject/fn-java-fdk-build:jdk17-1.0-latest as build-stage
+WORKDIR /function
+ENV MAVEN_OPTS -Dhttp.proxyHost= -Dhttp.proxyPort= -Dhttps.proxyHost= -Dhttps.proxyPort= -Dhttp.nonProxyHosts= -Dmaven.repo.local=/usr/share/maven/ref/repository
+ADD pom.xml /function/pom.xml
+RUN ["mvn", "package", "dependency:copy-dependencies", "-DincludeScope=runtime", "-DskipTests=true", "-Dmdep.prependGroupId=true", "-DoutputDirectory=target", "--fail-never"]
+ADD src /function/src
+RUN ["mvn", "package"]
+
+FROM container-registry.oracle.com/graalvm/native-image:23-ol8 AS native
+WORKDIR /app
+COPY --from=build-stage /function/target .
+ADD reflection.json .
+
+RUN native-image \\
+     -H:ReflectionConfigurationFiles=/app/reflection.json \\
+     -Ob \\
+     -H:Name=Hello \\
+     -cp "/app/hello-1.0.0.jar:/app/*"  \\
+        com.fnproject.fn.runtime.EntryPoint
+
+FROM fnproject/fn-java-fdk:jre17-latest as fdk
+
+FROM container-registry.oracle.com/os/oraclelinux:8-slim
+COPY --from=native /app/Hello .
+COPY --from=fdk /function/runtime/* ./
+ENTRYPOINT [ "./Hello" ]
+CMD [ "com.example.fn.HelloFunction::handleRequest", "-Djava.library.path=/lib"]
+`;
+
+const GRAALVM_REFLECTION_JSON = `[
+    {
+      "name": "com.example.fn.HelloFunction",
+      "allDeclaredMethods": true,
+      "methods": [
+        { "name": "<init>", "parameterTypes": [] }
+      ]
+    }
+]`;
+
+const GRAALVM_POM_RUNTIME_DEP = `        <dependency>
+            <groupId>com.fnproject.fn</groupId>
+            <artifactId>runtime</artifactId>
+            <version>\${fdk.version}</version>
+        </dependency>
+`;
+
+const GRAALVM_POM_BUILD_BLOCK = `    <build>
+        <plugins>
+            <plugin>
+                <!-- Copy dependencies -->
+                <artifactId>maven-dependency-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <phase>install</phase>
+                        <goals>
+                            <goal>copy-dependencies</goal>
+                        </goals>
+                        <configuration>
+                            <outputDirectory>\${project.build.directory}/lib</outputDirectory>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
+`;
+
 export interface OciStackConfig {
   compartmentId: string;
   ocirCompartmentId?: string;
@@ -192,12 +259,47 @@ RUN chmod -R o+r /function
 ENTRYPOINT ["node", "func.js"]
 `;
       } else {
-        const dockerfileContentThin = `FROM docker.io/fnproject/fn-java-fdk:jre17-1.1.5
+        const useGraalVm = (process.env.OCI_USE_GRAALVM_JAVA || '').trim() === '1';
+        if (useGraalVm) {
+          try {
+            // Use baked-in GraalVM Dockerfile template
+            dockerfileContent = GRAALVM_JAVA_DOCKERFILE;
+
+            // Ensure reflection.json exists in project root
+            const reflectionTargetPath = path.join(functionCodePath, 'reflection.json');
+            if (!fs.existsSync(reflectionTargetPath)) {
+              fs.writeFileSync(reflectionTargetPath, GRAALVM_REFLECTION_JSON, 'utf8');
+            }
+
+            // Ensure pom.xml has runtime dependency and GraalVM build block
+            const projectPomPath = path.join(functionCodePath, 'pom.xml');
+            if (fs.existsSync(projectPomPath)) {
+              let pomContent = fs.readFileSync(projectPomPath, 'utf8');
+
+              if (!pomContent.includes('<artifactId>runtime</artifactId>') && pomContent.includes('</dependencies>')) {
+                pomContent = pomContent.replace('</dependencies>', `${GRAALVM_POM_RUNTIME_DEP}    </dependencies>`);
+              }
+
+              if (pomContent.includes('<build>')) {
+                pomContent = pomContent.replace(/<build>[\\s\\S]*?<\\/build>/, GRAALVM_POM_BUILD_BLOCK);
+              } else if (pomContent.includes('</project>')) {
+                pomContent = pomContent.replace('</project>', `  ${GRAALVM_POM_BUILD_BLOCK}
+</project>`);
+              }
+
+              fs.writeFileSync(projectPomPath, pomContent, 'utf8');
+            }
+          } catch {
+            // Ignore and fall back to standard Java Dockerfile
+          }
+        }
+        if (!dockerfileContent) {
+          const dockerfileContentThin = `FROM docker.io/fnproject/fn-java-fdk:jre17-1.1.5
 WORKDIR /function
 COPY target/*.jar /function/app/
 CMD ["${handler.replace(/"/g, '\\"')}"]
 `;
-        const dockerfileContentFull = `FROM docker.io/fnproject/fn-java-fdk-build:jdk17-1.1.7 as build-stage
+          const dockerfileContentFull = `FROM docker.io/fnproject/fn-java-fdk-build:jdk17-1.1.7 as build-stage
 WORKDIR /function
 ENV MAVEN_OPTS -Dhttp.proxyHost= -Dhttp.proxyPort= -Dhttps.proxyHost= -Dhttps.proxyPort= -Dhttp.nonProxyHosts= -Dmaven.repo.local=/usr/share/maven/ref/repository
 ADD pom.xml /function/pom.xml
@@ -208,7 +310,8 @@ FROM docker.io/fnproject/fn-java-fdk:jre17-1.1.7
 WORKDIR /function
 COPY --from=build-stage /function/target/*.jar /function/app/
 CMD ["${handler.replace(/"/g, '\\"')}"]`;
-        dockerfileContent = useThin ? dockerfileContentThin : dockerfileContentFull;
+          dockerfileContent = useThin ? dockerfileContentThin : dockerfileContentFull;
+        }
       }
       const dockerignoreContent = `node_modules
 .git

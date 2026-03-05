@@ -27,6 +27,7 @@ Only **`OCI_COMPARTMENT_ID`** (or `OCI_COMPARTMENT_OCID`) is required for deploy
 | `OCI_FUNCTION_APP_NAME` | Functions application name | func.yaml |
 | `OCI_FUNCTION_NAME` | Function name | func.yaml |
 | `OCI_FUNCTION_JAR_PATH` | Path to JAR or directory with Dockerfile (Java functions only) | — |
+| `OCI_USE_GRAALVM_JAVA` | When `1`, use GraalVM native-image Dockerfile for Java functions and update `pom.xml`/`reflection.json` accordingly | `0` |
 | `OCI_FUNCTION_HANDLER` | Handler (e.g. Java FDK CMD) | func.yaml |
 | `OCI_FUNCTION_MEMORY_MB` | Memory in MB | func.yaml |
 | `OCI_FUNCTION_TIMEOUT_SECONDS` | Timeout in seconds | func.yaml |

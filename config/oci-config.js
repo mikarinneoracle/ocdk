@@ -488,7 +488,6 @@ function discoverFromFuncYamlAndTarget() {
     const functionName = process.env.OCI_FUNCTION_NAME?.trim() || nameFromYaml || path.basename(projectDir) || 'oci-function';
     const imageTag = process.env.OCI_IMAGE_TAG?.trim() || getFuncYamlVersion(projectDir);
     const handler = process.env.OCI_FUNCTION_HANDLER?.trim() || getFuncYamlHandler(projectDir);
-    const useThinDockerfile = isPython || isNode ? false : !!jarPath;
     const memoryMb = getFuncYamlMemory(projectDir);
     const timeoutSeconds = getFuncYamlTimeout(projectDir);
     const config = getFuncYamlConfig(projectDir);
@@ -499,7 +498,6 @@ function discoverFromFuncYamlAndTarget() {
         runtime,
         imageTag: imageTag || undefined,
         handler: handler || undefined,
-        useThinDockerfile,
         memoryMb,
         timeoutSeconds,
         config,
@@ -559,7 +557,6 @@ async function getOciConfig() {
             dockerContextPath = fs.statSync(p).isDirectory() ? p : path.dirname(p);
     }
     const handler = process.env.OCI_FUNCTION_HANDLER?.trim() || discovered.handler;
-    const useThinDockerfile = discovered.useThinDockerfile ?? false;
     const memoryEnv = process.env.OCI_FUNCTION_MEMORY_MB?.trim();
     const functionMemoryMb = memoryEnv
         ? String(parseInt(memoryEnv, 10))
@@ -614,7 +611,6 @@ async function getOciConfig() {
         runtime: discovered.runtime,
         imageTag,
         handler: handler || undefined,
-        useThinDockerfile,
         ocirRepositoryName: process.env.OCI_OCIR_REPOSITORY_NAME || undefined,
         functionMemoryMb: functionMemoryMb || undefined,
         functionTimeoutSeconds: functionTimeoutSeconds ?? undefined,

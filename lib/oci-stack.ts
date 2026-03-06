@@ -104,8 +104,6 @@ export interface OciStackConfig {
   imageTag?: string;
   /** Java FDK CMD handler (from func.yaml or OCI_FUNCTION_HANDLER). */
   handler?: string;
-  /** When true, deploy uses thin Dockerfile (no Maven in image); full build only in redeploy:function. */
-  useThinDockerfile?: boolean;
   ocirRepositoryName?: string;
   /** API Gateway deployment path prefix. Default '/'. */
   apiGwPathPrefix?: string;
@@ -212,7 +210,6 @@ export class OciStack extends TerraformStack {
         image_url: imageUrl,
         image_tag: imageTag,
         handler: config.handler || '',
-        use_thin_dockerfile: config.useThinDockerfile === true ? '1' : '0',
         namespace: config.namespace,
         region: config.region,
       });
@@ -223,7 +220,6 @@ export class OciStack extends TerraformStack {
         ? `export OCIR_AUTH_TOKEN="${process.env.OCI_AUTH_TOKEN}"; OCIR_USER="${ocirUser}"; [ "$OCIR_USER" = "AUTO_DETECT" ] && OCIR_USER="${namespaceP}/user"; echo "$OCIR_AUTH_TOKEN" | docker login ${ocirRegistry} -u "$OCIR_USER" --password-stdin || exit 1`
         : `oci raw-request --region ${regionP} --http-method GET --target-uri "https://${ocirRegistry}/20180419/docker/token" 2>/dev/null | (command -v jq >/dev/null && jq -r .data.token || grep -o '"token":"[^"]*"' | cut -d'"' -f4) | docker login -u BEARER_TOKEN --password-stdin ${ocirRegistry} || (echo "Set OCI_AUTH_TOKEN or configure OCI CLI" >&2; exit 1)`;
       const handler = config.handler || 'com.example.fn.HelloFunction::handleRequest';
-      const useThin = config.useThinDockerfile === true;
       const runtime = config.runtime?.toLowerCase();
       let dockerfileContent = '';
       if (runtime && runtime.startsWith('python')) {
@@ -286,12 +282,7 @@ ENTRYPOINT ["node", "func.js"]
           }
         }
         if (!dockerfileContent) {
-          const dockerfileContentThin = `FROM docker.io/fnproject/fn-java-fdk:jre17-1.1.5
-WORKDIR /function
-COPY target/*.jar /function/app/
-CMD ["${handler.replace(/"/g, '\\"')}"]
-`;
-          const dockerfileContentFull = `FROM docker.io/fnproject/fn-java-fdk-build:jdk17-1.1.7 as build-stage
+          dockerfileContent = `FROM docker.io/fnproject/fn-java-fdk-build:jdk17-1.1.7 as build-stage
 WORKDIR /function
 ENV MAVEN_OPTS -Dhttp.proxyHost= -Dhttp.proxyPort= -Dhttps.proxyHost= -Dhttps.proxyPort= -Dhttp.nonProxyHosts= -Dmaven.repo.local=/usr/share/maven/ref/repository
 ADD pom.xml /function/pom.xml
@@ -302,7 +293,6 @@ FROM docker.io/fnproject/fn-java-fdk:jre17-1.1.7
 WORKDIR /function
 COPY --from=build-stage /function/target/*.jar /function/app/
 CMD ["${handler.replace(/"/g, '\\"')}"]`;
-          dockerfileContent = useThin ? dockerfileContentThin : dockerfileContentFull;
         }
       }
       const dockerignoreContent = `node_modules

@@ -59,8 +59,6 @@ export interface OciConfig {
   imageTag?: string;
   /** Java FDK CMD handler (from func.yaml cmd/handler or OCI_FUNCTION_HANDLER; default below). */
   handler?: string;
-  /** When true, deploy uses a thin Dockerfile (COPY target/*.jar only); full Maven build only in redeploy:function. */
-  useThinDockerfile?: boolean;
   ocirRepositoryName?: string;
   /** Function memory in MB (128, 256, 512, 1024, 2048, 3072). From func.yaml memory or OCI_FUNCTION_MEMORY_MB. */
   functionMemoryMb?: string;
@@ -461,7 +459,6 @@ function discoverFromFuncYamlAndTarget(): {
   runtime?: string;
   imageTag?: string;
   handler?: string;
-  useThinDockerfile?: boolean;
   memoryMb?: number;
   timeoutSeconds?: number;
   config?: Record<string, string>;
@@ -496,7 +493,6 @@ function discoverFromFuncYamlAndTarget(): {
   const functionName = process.env.OCI_FUNCTION_NAME?.trim() || nameFromYaml || path.basename(projectDir) || 'oci-function';
   const imageTag = process.env.OCI_IMAGE_TAG?.trim() || getFuncYamlVersion(projectDir);
   const handler = process.env.OCI_FUNCTION_HANDLER?.trim() || getFuncYamlHandler(projectDir);
-  const useThinDockerfile = isPython || isNode ? false : !!jarPath;
   const memoryMb = getFuncYamlMemory(projectDir);
   const timeoutSeconds = getFuncYamlTimeout(projectDir);
   const config = getFuncYamlConfig(projectDir);
@@ -508,7 +504,6 @@ function discoverFromFuncYamlAndTarget(): {
     runtime,
     imageTag: imageTag || undefined,
     handler: handler || undefined,
-    useThinDockerfile,
     memoryMb,
     timeoutSeconds,
     config,
@@ -574,7 +569,6 @@ export async function getOciConfig(): Promise<OciConfig> {
   }
 
   const handler = process.env.OCI_FUNCTION_HANDLER?.trim() || discovered.handler;
-  const useThinDockerfile = discovered.useThinDockerfile ?? false;
 
   const memoryEnv = process.env.OCI_FUNCTION_MEMORY_MB?.trim();
   const functionMemoryMb = memoryEnv
@@ -635,7 +629,6 @@ export async function getOciConfig(): Promise<OciConfig> {
     runtime: discovered.runtime,
     imageTag,
     handler: handler || undefined,
-    useThinDockerfile,
     ocirRepositoryName: process.env.OCI_OCIR_REPOSITORY_NAME || undefined,
     functionMemoryMb: functionMemoryMb || undefined,
     functionTimeoutSeconds: functionTimeoutSeconds ?? undefined,

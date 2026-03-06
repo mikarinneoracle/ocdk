@@ -51,8 +51,6 @@ export interface OciConfig {
     imageTag?: string;
     /** Java FDK CMD handler (from func.yaml cmd/handler or OCI_FUNCTION_HANDLER; default below). */
     handler?: string;
-    /** When true, deploy uses a thin Dockerfile (COPY target/*.jar only); full Maven build only in redeploy:function. */
-    useThinDockerfile?: boolean;
     ocirRepositoryName?: string;
     /** Function memory in MB (128, 256, 512, 1024, 2048, 3072). From func.yaml memory or OCI_FUNCTION_MEMORY_MB. */
     functionMemoryMb?: string;

@@ -21,7 +21,6 @@ import { getOciConfig } from '../config/oci-config';
     runtime: ociConfig.runtime,
     imageTag: ociConfig.imageTag,
     handler: ociConfig.handler,
-    useThinDockerfile: ociConfig.useThinDockerfile,
     ocirRepositoryName: ociConfig.ocirRepositoryName,
     functionMemoryMb: ociConfig.functionMemoryMb,
     functionTimeoutSeconds: ociConfig.functionTimeoutSeconds,

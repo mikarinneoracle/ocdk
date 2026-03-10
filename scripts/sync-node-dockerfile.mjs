@@ -21,22 +21,25 @@ function addDockerIoPrefix(content) {
   );
 }
 
-/** Fixed block we inject after ADD package.json (sed x2, echo, commented mv). Backslashes doubled for TS template literal. */
-const OCKD_NODE_CUSTOMIZATION = `RUN sed '\\\\|"@mikarinneoracle/oci-cdk": ".*"|d' /function/package.json > /function/package_cleaned.json
+/** Fixed block we inject (replaces ADD package.json line): ADD with package-lock.json*, sed x2, comment, commented mv, npm ci/install, chown. Backslashes doubled for TS template literal. */
+const OCKD_NODE_CUSTOMIZATION = `ADD package.json package-lock.json* /function/
+RUN sed '\\\\|"@mikarinneoracle/oci-cdk": ".*"|d' /function/package.json > /function/package_cleaned.json
 RUN sed 's!\\\\("@fnproject/fdk": "[^"]*"\\\\),!\\\\1!' /function/package_cleaned.json > /function/package.json
-RUN echo "IF THIS LINE ABOVE FAILS COMMENT IT AND UNCOMMENT THE NEXT LINE"
-# RUN mv /function/package_cleaned.json /function/package.json`;
+# UNCOMMENT NEXT LINE AND COMMENT ABOVE LINE IF BUILD FAILS
+#RUN mv /function/package_cleaned.json /function/package.json
+RUN npm ci --omit=dev 2>/dev/null || npm install --omit=dev
+RUN chown -R $(id -u):$(id -g) node_modules`;
 
 /**
  * Strip the ocdk customization block from content for comparison.
- * Removes lines between "ADD package.json" and "RUN npm install" (exclusive of those two).
+ * Removes lines between "ADD package.json" and the runtime "FROM ... node:22" (exclusive of ADD and FROM).
  */
 function stripCustomizations(content) {
   const lines = content.split(/\r?\n/);
-  const addIdx = lines.findIndex((l) => /ADD\s+package\.json\s+/.test(l));
-  const npmIdx = lines.findIndex((l, idx) => idx > addIdx && /RUN\s+npm\s+install/.test(l));
-  if (addIdx === -1 || npmIdx === -1) return content;
-  return [...lines.slice(0, addIdx + 1), ...lines.slice(npmIdx)].join('\n');
+  const addIdx = lines.findIndex((l) => /ADD\s+package\.json/.test(l));
+  const fromIdx = lines.findIndex((l, idx) => idx > addIdx && /FROM\s+.*fnproject\/node:22\s*$/.test(l.trim()));
+  if (addIdx === -1 || fromIdx === -1) return content;
+  return [...lines.slice(0, addIdx + 1), ...lines.slice(fromIdx)].join('\n');
 }
 
 function normalizeForCompare(content) {
@@ -46,17 +49,18 @@ function normalizeForCompare(content) {
     .trim();
 }
 
-/** Insert the fixed ocdk customization block after "ADD package.json" in the build-stage. */
+/** Replace the fn "ADD package.json" line with the full ocdk customization block (ADD package-lock.json* + sed + npm + chown). */
 function insertCustomizations(content, customizationBlock) {
   const lines = content.split(/\r?\n/);
-  const addPackageJson = /ADD\s+package\.json\s+/;
+  const addPackageJson = /ADD\s+package\.json/;
   const out = [];
   let inserted = false;
   for (const line of lines) {
-    out.push(line);
     if (!inserted && addPackageJson.test(line)) {
-      out.push('', customizationBlock, '');
+      out.push(customizationBlock, '');
       inserted = true;
+    } else {
+      out.push(line);
     }
   }
   return out.join('\n');
@@ -99,7 +103,7 @@ if (normalizedFn === normalizedCurrent) {
   process.exit(0);
 }
 
-console.error('Node Dockerfile differs from lib/oci-stack.ts — updating (injecting JSON-safe oci-cdk removal).');
+console.error('Node Dockerfile differs from lib/oci-stack.ts — updating (injecting ADD package-lock.json* + sed + npm ci/install + chown).');
 const newContent = insertCustomizations(fnWithPrefix, OCKD_NODE_CUSTOMIZATION);
 
 ociStack =

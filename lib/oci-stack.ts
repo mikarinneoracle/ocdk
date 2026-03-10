@@ -241,14 +241,15 @@ ENV PYTHONPATH=/function:/python
 ENTRYPOINT ["/python/bin/fdk", "/function/func.py", "handler"]
 `;
       } else if (runtime && runtime.startsWith('node')) {
-        dockerfileContent = `FROM docker.io/fnproject/node:22-dev as build-stage
+        dockerfileContent = `FROM docker.io/fnproject/node:22-dev AS build-stage
 WORKDIR /function
-ADD package.json /function/
+ADD package.json package-lock.json* /function/
 RUN sed '\\|"@mikarinneoracle/oci-cdk": ".*"|d' /function/package.json > /function/package_cleaned.json
 RUN sed 's!\\("@fnproject/fdk": "[^"]*"\\),!\\1!' /function/package_cleaned.json > /function/package.json
-RUN echo "IF THIS LINE ABOVE FAILS COMMENT IT AND UNCOMMENT THE NEXT LINE"
-# RUN mv /function/package_cleaned.json /function/package.json
-RUN npm install  && chown -R $(id -u):$(id -g) node_modules
+# UNCOMMENT NEXT LINE AND COMMENT ABOVE LINE IF BUILD FAILS
+#RUN mv /function/package_cleaned.json /function/package.json
+RUN npm ci --omit=dev 2>/dev/null || npm install --omit=dev
+RUN chown -R $(id -u):$(id -g) node_modules
 FROM docker.io/fnproject/node:22
 WORKDIR /function
 ADD . /function/

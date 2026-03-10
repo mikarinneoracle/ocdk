@@ -248,6 +248,7 @@ RUN sed '\\|"@mikarinneoracle/oci-cdk": ".*"|d' /function/package.json > /functi
 RUN sed 's!\\("@fnproject/fdk": "[^"]*"\\),!\\1!' /function/package_cleaned.json > /function/package.json
 RUN echo "IF THIS LINE ABOVE FAILS COMMENT IT AND UNCOMMENT THE NEXT LINE"
 # RUN mv /function/package_cleaned.json /function/package.json
+RUN node -e 'const fs=require("fs"); const p=JSON.parse(fs.readFileSync("/function/package.json","utf8")); p.overrides=p.overrides||{}; p.overrides["oci-common"]="2.126.0"; fs.writeFileSync("/function/package.json", JSON.stringify(p,null,2));'
 RUN npm install  && chown -R $(id -u):$(id -g) node_modules
 FROM docker.io/fnproject/node:22
 WORKDIR /function

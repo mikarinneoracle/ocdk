@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 /**
  * Compare fn CLI-generated Node Dockerfile (function/Dockerfile) with the Node
- * Dockerfile template in lib/oci-stack.ts. Ocdk injects a JSON-safe removal of
- * @mikarinneoracle/oci-cdk from package.json (RUN node -e ...); we strip that
- * block for comparison, then re-inject it when updating.
+ * Dockerfile template in lib/oci-stack.ts. Ocdk injects RUN sed/mv to remove
+ * @mikarinneoracle/oci-cdk from package.json; we strip that block for comparison,
+ * then re-inject it when updating.
  * Prints "updated" or "unchanged".
  */
 import fs from 'fs';
@@ -21,14 +21,11 @@ function addDockerIoPrefix(content) {
   );
 }
 
-/** Fixed block we inject after ADD package.json (remove oci-cdk + force oci-common to 2.126.0). Backslashes doubled for TS template literal. */
-const OCKD_NODE_CUSTOMIZATION = `# Remove @mikarinneoracle/oci-cdk and force oci-common to 2.126.0 (avoids ETARGET for non-existent 2.126.1)
-RUN node -e 'const fs=require("fs"); \\\\
-  const p=JSON.parse(fs.readFileSync("package.json","utf8")); \\\\
-  if (p.dependencies && p.dependencies["@mikarinneoracle/oci-cdk"]) delete p.dependencies["@mikarinneoracle/oci-cdk"]; \\\\
-  p.overrides = p.overrides || {}; \\\\
-  p.overrides["oci-common"] = "2.126.0"; \\\\
-  fs.writeFileSync("package.json", JSON.stringify(p,null,2));'`;
+/** Fixed block we inject after ADD package.json (sed to remove oci-cdk, sed for fdk, echo hint, commented mv). Backslashes doubled for TS template literal. */
+const OCKD_NODE_CUSTOMIZATION = `RUN sed '\\\\|"@mikarinneoracle/oci-cdk": ".*"|d' /function/package.json > /function/package_cleaned.json
+RUN sed 's!\\\\("@fnproject/fdk": "[^"]*"\\\\),!\\\\1!' /function/package_cleaned.json > /function/package.json
+RUN echo "IF THIS LINE ABOVE FAILS COMMENT IT AND UNCOMMENT THE NEXT LINE"
+# RUN mv /function/package_cleaned.json /function/package.json`;
 
 /**
  * Strip the ocdk customization block from content for comparison.

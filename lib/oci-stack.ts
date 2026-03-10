@@ -244,15 +244,10 @@ ENTRYPOINT ["/python/bin/fdk", "/function/func.py", "handler"]
         dockerfileContent = `FROM docker.io/fnproject/node:22-dev as build-stage
 WORKDIR /function
 ADD package.json /function/
-
-# Remove @mikarinneoracle/oci-cdk and force oci-common to 2.126.0 (avoids ETARGET for non-existent 2.126.1)
-RUN node -e 'const fs=require("fs"); \\
-  const p=JSON.parse(fs.readFileSync("package.json","utf8")); \\
-  if (p.dependencies && p.dependencies["@mikarinneoracle/oci-cdk"]) delete p.dependencies["@mikarinneoracle/oci-cdk"]; \\
-  p.overrides = p.overrides || {}; \\
-  p.overrides["oci-common"] = "2.126.0"; \\
-  fs.writeFileSync("package.json", JSON.stringify(p,null,2));'
-
+RUN sed '\\|"@mikarinneoracle/oci-cdk": ".*"|d' /function/package.json > /function/package_cleaned.json
+RUN sed 's!\\("@fnproject/fdk": "[^"]*"\\),!\\1!' /function/package_cleaned.json > /function/package.json
+RUN echo "IF THIS LINE ABOVE FAILS COMMENT IT AND UNCOMMENT THE NEXT LINE"
+# RUN mv /function/package_cleaned.json /function/package.json
 RUN npm install  && chown -R $(id -u):$(id -g) node_modules
 FROM docker.io/fnproject/node:22
 WORKDIR /function

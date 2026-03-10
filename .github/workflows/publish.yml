@@ -158,19 +158,20 @@ jobs:
         id: version_flag
         run: |
           bumped=false
-          # If any Dockerfile sync updated, consider it a version bump trigger
-          if [ "${{ steps.sync_java.outputs.result }}" = "updated" ] || [ "${{ steps.sync_python.outputs.result }}" = "updated" ] || [ "${{ steps.sync_node.outputs.result }}" = "updated" ]; then
-            bumped=true
+          # Nightly: bump version when any Dockerfile sync updated (auto-bump only on schedule)
+          if [ "${{ github.event_name }}" = "schedule" ]; then
+            if [ "${{ steps.sync_java.outputs.result }}" = "updated" ] || [ "${{ steps.sync_python.outputs.result }}" = "updated" ] || [ "${{ steps.sync_node.outputs.result }}" = "updated" ]; then
+              bumped=true
+            fi
           fi
-          # Also treat a change to package.json in the latest commit as a version bump,
-          # but only for push-triggered runs (avoid nightly schedule re-publishing same version)
+          # Push: treat a change to package.json in the latest commit as a manual version bump trigger
           if [ "${{ github.event_name }}" = "push" ] && git diff --name-only HEAD~1..HEAD | grep -q '^package.json$'; then
             bumped=true
           fi
           echo "version_bumped=${bumped}" >> $GITHUB_OUTPUT
 
       - name: Bump version and push if Dockerfile was updated
-        if: steps.sync_java.outputs.result == 'updated' || steps.sync_python.outputs.result == 'updated' || steps.sync_node.outputs.result == 'updated'
+        if: github.event_name == 'schedule' && (steps.sync_java.outputs.result == 'updated' || steps.sync_python.outputs.result == 'updated' || steps.sync_node.outputs.result == 'updated')
         run: |
           npm version patch --no-git-tag-version
           git config user.name "github-actions[bot]"

@@ -21,12 +21,11 @@ function addDockerIoPrefix(content) {
   );
 }
 
-/** Fixed block we inject after ADD package.json (sed x2, echo, commented mv, overrides for oci-common). Backslashes doubled for TS template literal. */
+/** Fixed block we inject after ADD package.json (sed x2, echo, commented mv). Backslashes doubled for TS template literal. */
 const OCKD_NODE_CUSTOMIZATION = `RUN sed '\\\\|"@mikarinneoracle/oci-cdk": ".*"|d' /function/package.json > /function/package_cleaned.json
 RUN sed 's!\\\\("@fnproject/fdk": "[^"]*"\\\\),!\\\\1!' /function/package_cleaned.json > /function/package.json
 RUN echo "IF THIS LINE ABOVE FAILS COMMENT IT AND UNCOMMENT THE NEXT LINE"
-# RUN mv /function/package_cleaned.json /function/package.json
-RUN node -e 'const fs=require("fs"); const p=JSON.parse(fs.readFileSync("/function/package.json","utf8")); p.overrides=p.overrides||{}; p.overrides["oci-common"]="2.126.0"; fs.writeFileSync("/function/package.json", JSON.stringify(p,null,2));'`;
+# RUN mv /function/package_cleaned.json /function/package.json`;
 
 /**
  * Strip the ocdk customization block from content for comparison.

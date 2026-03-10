@@ -245,12 +245,12 @@ ENTRYPOINT ["/python/bin/fdk", "/function/func.py", "handler"]
 WORKDIR /function
 ADD package.json /function/
 
-# Remove @mikarinneoracle/oci-cdk from dependencies in a JSON-safe way
+# Remove @mikarinneoracle/oci-cdk and force oci-common to 2.126.0 (avoids ETARGET for non-existent 2.126.1)
 RUN node -e 'const fs=require("fs"); \\
   const p=JSON.parse(fs.readFileSync("package.json","utf8")); \\
-  if (p.dependencies && p.dependencies["@mikarinneoracle/oci-cdk"]) { \\
-    delete p.dependencies["@mikarinneoracle/oci-cdk"]; \\
-  } \\
+  if (p.dependencies && p.dependencies["@mikarinneoracle/oci-cdk"]) delete p.dependencies["@mikarinneoracle/oci-cdk"]; \\
+  p.overrides = p.overrides || {}; \\
+  p.overrides["oci-common"] = "2.126.0"; \\
   fs.writeFileSync("package.json", JSON.stringify(p,null,2));'
 
 RUN npm install  && chown -R $(id -u):$(id -g) node_modules

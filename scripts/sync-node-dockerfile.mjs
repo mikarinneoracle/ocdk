@@ -21,13 +21,13 @@ function addDockerIoPrefix(content) {
   );
 }
 
-/** Fixed block we inject after ADD package.json (remove oci-cdk from dependencies in a JSON-safe way). Backslashes doubled for TS template literal. */
-const OCKD_NODE_CUSTOMIZATION = `# Remove @mikarinneoracle/oci-cdk from dependencies in a JSON-safe way
+/** Fixed block we inject after ADD package.json (remove oci-cdk + force oci-common to 2.126.0). Backslashes doubled for TS template literal. */
+const OCKD_NODE_CUSTOMIZATION = `# Remove @mikarinneoracle/oci-cdk and force oci-common to 2.126.0 (avoids ETARGET for non-existent 2.126.1)
 RUN node -e 'const fs=require("fs"); \\\\
   const p=JSON.parse(fs.readFileSync("package.json","utf8")); \\\\
-  if (p.dependencies && p.dependencies["@mikarinneoracle/oci-cdk"]) { \\\\
-    delete p.dependencies["@mikarinneoracle/oci-cdk"]; \\\\
-  } \\\\
+  if (p.dependencies && p.dependencies["@mikarinneoracle/oci-cdk"]) delete p.dependencies["@mikarinneoracle/oci-cdk"]; \\\\
+  p.overrides = p.overrides || {}; \\\\
+  p.overrides["oci-common"] = "2.126.0"; \\\\
   fs.writeFileSync("package.json", JSON.stringify(p,null,2));'`;
 
 /**

@@ -243,10 +243,19 @@ ENTRYPOINT ["/python/bin/fdk", "/function/func.py", "handler"]
       } else if (runtime && runtime.startsWith('node')) {
         dockerfileContent = `FROM docker.io/fnproject/node:22-dev as build-stage
 WORKDIR /function
+
 ADD package.json /function/
-RUN sed '\\|"@mikarinneoracle/oci-cdk": ".*"|d' /function/package.json > /function/package_cleaned.json
-RUN sed 's!\\("@fnproject/fdk": "[^"]*"\\),!\\1!' /function/package_cleaned.json > /function/package.json
-RUN npm install  && chown -R $(id -u):$(id -g) node_modules
+
+# Remove @mikarinneoracle/oci-cdk from dependencies in a JSON-safe way
+RUN node -e 'const fs=require("fs"); \\
+  const p=JSON.parse(fs.readFileSync("package.json","utf8")); \\
+  if (p.dependencies && p.dependencies["@mikarinneoracle/oci-cdk"]) { \\
+    delete p.dependencies["@mikarinneoracle/oci-cdk"]; \\
+  } \\
+  fs.writeFileSync("package.json", JSON.stringify(p,null,2));'
+
+RUN npm install && chown -R $(id -u):$(id -g) node_modules
+
 FROM docker.io/fnproject/node:22
 WORKDIR /function
 ADD . /function/

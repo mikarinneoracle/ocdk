@@ -33,3 +33,6 @@ Thumbs.db
 # Logs
 *.log
 npm-debug.log*
+
+# Local helper scripts
+fix-tf-providers-macos.sh

@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 /**
  * Compare fn CLI-generated Node Dockerfile (function/Dockerfile) with the Node
- * Dockerfile template in lib/oci-stack.ts. Ocdk adds RUN sed (and RUN cat) customizations;
- * we strip them for comparison, then re-inject them into the fn Dockerfile for the final template.
+ * Dockerfile template in lib/oci-stack.ts. Ocdk injects a JSON-safe removal of
+ * @mikarinneoracle/oci-cdk from package.json (RUN node -e ...); we strip that
+ * block for comparison, then re-inject it when updating.
  * Prints "updated" or "unchanged".
  */
 import fs from 'fs';
@@ -20,17 +21,25 @@ function addDockerIoPrefix(content) {
   );
 }
 
-/** Lines we inject after ADD package.json in build-stage (ocdk customizations). */
-function isCustomizationLine(line) {
-  return /^\s*RUN sed\s/.test(line) || /^\s*RUN cat\s/.test(line);
-}
+/** Fixed block we inject after ADD package.json (remove oci-cdk from dependencies in a JSON-safe way). Backslashes doubled for TS template literal. */
+const OCKD_NODE_CUSTOMIZATION = `# Remove @mikarinneoracle/oci-cdk from dependencies in a JSON-safe way
+RUN node -e 'const fs=require("fs"); \\\\
+  const p=JSON.parse(fs.readFileSync("package.json","utf8")); \\\\
+  if (p.dependencies && p.dependencies["@mikarinneoracle/oci-cdk"]) { \\\\
+    delete p.dependencies["@mikarinneoracle/oci-cdk"]; \\\\
+  } \\\\
+  fs.writeFileSync("package.json", JSON.stringify(p,null,2));'`;
 
-/** Remove customization lines for comparison. */
+/**
+ * Strip the ocdk customization block from content for comparison.
+ * Removes lines between "ADD package.json" and "RUN npm install" (exclusive of those two).
+ */
 function stripCustomizations(content) {
-  return content
-    .split(/\r?\n/)
-    .filter((line) => !isCustomizationLine(line))
-    .join('\n');
+  const lines = content.split(/\r?\n/);
+  const addIdx = lines.findIndex((l) => /ADD\s+package\.json\s+/.test(l));
+  const npmIdx = lines.findIndex((l, idx) => idx > addIdx && /RUN\s+npm\s+install/.test(l));
+  if (addIdx === -1 || npmIdx === -1) return content;
+  return [...lines.slice(0, addIdx + 1), ...lines.slice(npmIdx)].join('\n');
 }
 
 function normalizeForCompare(content) {
@@ -40,24 +49,16 @@ function normalizeForCompare(content) {
     .trim();
 }
 
-/** Extract customization lines from content (order preserved). */
-function extractCustomizations(content) {
-  return content
-    .split(/\r?\n/)
-    .filter((line) => isCustomizationLine(line));
-}
-
-/** Insert customization lines after "ADD package.json" in the build-stage. */
-function insertCustomizations(content, customizationLines) {
-  if (customizationLines.length === 0) return content;
+/** Insert the fixed ocdk customization block after "ADD package.json" in the build-stage. */
+function insertCustomizations(content, customizationBlock) {
   const lines = content.split(/\r?\n/);
   const addPackageJson = /ADD\s+package\.json\s+/;
-  let inserted = false;
   const out = [];
+  let inserted = false;
   for (const line of lines) {
     out.push(line);
     if (!inserted && addPackageJson.test(line)) {
-      customizationLines.forEach((l) => out.push(l));
+      out.push('', customizationBlock, '');
       inserted = true;
     }
   }
@@ -70,7 +71,6 @@ if (!fs.existsSync(fnDockerfilePath)) {
 }
 
 const fnDockerfile = fs.readFileSync(fnDockerfilePath, 'utf8');
-// Refuse to use Python Dockerfile in Node block (e.g. if function/ wasn't regenerated for node)
 if (/fnproject\/python|func\.py|python\/bin\/fdk/.test(fnDockerfile)) {
   console.error('function/Dockerfile looks like Python, not Node (run fn init --runtime node first)');
   process.exit(2);
@@ -83,7 +83,6 @@ let ociStack = fs.readFileSync(ociStackPath, 'utf8');
 
 const markerStart = "        dockerfileContent = `";
 const markerEnd = "`;\n      } else {";
-// Node block is the one that contains node:20-dev
 const nodeBlockStart = ociStack.indexOf("} else if (runtime && runtime.startsWith('node'))");
 const i = ociStack.indexOf(markerStart, nodeBlockStart);
 const j = ociStack.indexOf(markerEnd, i);
@@ -93,7 +92,6 @@ if (i === -1 || j === -1) {
 }
 
 const currentNode = ociStack.slice(i + markerStart.length, j);
-const customizations = extractCustomizations(currentNode);
 
 const fnWithPrefix = addDockerIoPrefix(fnDockerfile);
 const normalizedFn = normalizeForCompare(fnWithPrefix);
@@ -104,8 +102,8 @@ if (normalizedFn === normalizedCurrent) {
   process.exit(0);
 }
 
-console.error('Node Dockerfile differs from lib/oci-stack.ts — updating (keeping RUN sed/cat customizations).');
-const newContent = insertCustomizations(fnWithPrefix, customizations);
+console.error('Node Dockerfile differs from lib/oci-stack.ts — updating (injecting JSON-safe oci-cdk removal).');
+const newContent = insertCustomizations(fnWithPrefix, OCKD_NODE_CUSTOMIZATION);
 
 ociStack =
   ociStack.slice(0, i + markerStart.length) +

@@ -243,7 +243,6 @@ ENTRYPOINT ["/python/bin/fdk", "/function/func.py", "handler"]
       } else if (runtime && runtime.startsWith('node')) {
         dockerfileContent = `FROM docker.io/fnproject/node:22-dev as build-stage
 WORKDIR /function
-
 ADD package.json /function/
 
 # Remove @mikarinneoracle/oci-cdk from dependencies in a JSON-safe way
@@ -254,8 +253,7 @@ RUN node -e 'const fs=require("fs"); \\
   } \\
   fs.writeFileSync("package.json", JSON.stringify(p,null,2));'
 
-RUN npm install && chown -R $(id -u):$(id -g) node_modules
-
+RUN npm install  && chown -R $(id -u):$(id -g) node_modules
 FROM docker.io/fnproject/node:22
 WORKDIR /function
 ADD . /function/

@@ -46,6 +46,7 @@ function normalizeForCompare(content) {
   return stripCustomizations(content)
     .replace(/\r\n/g, '\n')
     .replace(/\r/g, '\n')
+    .replace(/\s+as\s+build-stage$/gim, ' AS build-stage')
     .trim();
 }
 
@@ -104,7 +105,8 @@ if (normalizedFn === normalizedCurrent) {
 }
 
 console.error('Node Dockerfile differs from lib/oci-stack.ts — updating (injecting ADD package-lock.json* + sed + npm ci/install + chown).');
-const newContent = insertCustomizations(fnWithPrefix, OCKD_NODE_CUSTOMIZATION);
+let newContent = insertCustomizations(fnWithPrefix, OCKD_NODE_CUSTOMIZATION);
+newContent = newContent.replace(/\s+as\s+build-stage$/gim, ' AS build-stage');
 
 ociStack =
   ociStack.slice(0, i + markerStart.length) +

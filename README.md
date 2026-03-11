@@ -70,3 +70,13 @@ npx ocdk destroy
 - **`npx ocdk deploy`** – Deploy the stack. Options (e.g. `--auto-approve`) are passed through.
 - **`npx ocdk tail:execution-log`** – Tail function execution logs. Resolves log IDs from terraform output or `OCI_LOG_GROUP_ID` / `OCI_EXECUTION_LOG_ID`. Set **`OCI_TAIL_DEBUG=1`** to print debug info to stderr if you get no output. Requires **`OCI_COMPARTMENT_ID`** (or `OCI_COMPARTMENT_OCID`) when run without a project `tail-function-logs.js`.
 - **`npx ocdk destroy`** – Destroy the stack (Terraform destroy) using the same state/backend configuration as deploy. Options (e.g. `--auto-approve`) are passed through.
+
+### GraalVM Java image notes
+
+When you enable GraalVM Java via `OCI_USE_GRAALVM_JAVA=1`, the generated Dockerfile uses:
+
+- `docker.io/fnproject/fn-java-fdk-build:jdk17-1.0-latest` and `docker.io/fnproject/fn-java-fdk:jre17-latest` for build/runtime
+- `container-registry.oracle.com/graalvm/native-image:23-ol8` for native-image
+- `container-registry.oracle.com/os/oraclelinux:8-slim` as the final base
+
+The Fn Project images on `docker.io` are public. The Oracle images on `container-registry.oracle.com` are also public, but you must accept Oracle Container Registry terms and perform a `docker login` to `container-registry.oracle.com` once (or use an environment such as OCI Cloud Shell that already has access) before builds can pull them.

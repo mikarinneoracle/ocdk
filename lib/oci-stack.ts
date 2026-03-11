@@ -19,7 +19,7 @@ import { OciBackendConfig, ocirHostKey, getOciImageUrl } from '../config/oci-con
 import * as fs from 'fs';
 import * as path from 'path';
 
-const GRAALVM_JAVA_DOCKERFILE = `FROM fnproject/fn-java-fdk-build:jdk17-1.0-latest as build-stage
+const GRAALVM_JAVA_DOCKERFILE = `FROM docker.io/fnproject/fn-java-fdk-build:jdk17-1.0-latest as build-stage
 WORKDIR /function
 ENV MAVEN_OPTS -Dhttp.proxyHost= -Dhttp.proxyPort= -Dhttps.proxyHost= -Dhttps.proxyPort= -Dhttp.nonProxyHosts= -Dmaven.repo.local=/usr/share/maven/ref/repository
 ADD pom.xml /function/pom.xml
@@ -39,7 +39,7 @@ RUN native-image \\
      -cp "/app/hello-1.0.0.jar:/app/*"  \\
         com.fnproject.fn.runtime.EntryPoint
 
-FROM fnproject/fn-java-fdk:jre17-latest as fdk
+FROM docker.io/fnproject/fn-java-fdk:jre17-latest as fdk
 
 FROM container-registry.oracle.com/os/oraclelinux:8-slim
 COPY --from=native /app/Hello .

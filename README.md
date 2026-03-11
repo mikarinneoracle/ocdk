@@ -79,4 +79,4 @@ When you enable GraalVM Java via `OCI_USE_GRAALVM_JAVA=1`, the generated Dockerf
 - `container-registry.oracle.com/graalvm/native-image:23-ol8` for native-image
 - `container-registry.oracle.com/os/oraclelinux:8-slim` as the final base
 
-The Fn Project images on `docker.io` are public. The Oracle images on `container-registry.oracle.com` are also public, but you must accept Oracle Container Registry terms and perform a `docker login` to `container-registry.oracle.com` with a registry-generated auth token once before builds can pull them (or use an environment such as OCI Cloud Shell that already has access).
+The Fn Project images on `docker.io` are public. The Oracle images on `container-registry.oracle.com` are also public, but you must accept Oracle Container Registry terms and perform a `docker login` to `container-registry.oracle.com` with a registry-generated auth token once before builds can pull them.

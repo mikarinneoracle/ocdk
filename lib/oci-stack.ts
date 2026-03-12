@@ -250,6 +250,8 @@ RUN sed 's!\\("@fnproject/fdk": "[^"]*"\\),!\\1!' /function/package_cleaned.json
 #RUN mv /function/package_cleaned.json /function/package.json
 RUN npm ci --omit=dev 2>/dev/null || npm install --omit=dev
 RUN chown -R $(id -u):$(id -g) node_modules
+
+RUN npm install  && chown -R $(id -u):$(id -g) node_modules
 FROM docker.io/fnproject/node:22
 WORKDIR /function
 ADD . /function/

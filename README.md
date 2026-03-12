@@ -2,10 +2,30 @@
 
 OCI Functions (Java, Python, Node.js), API Gateway, and related infrastructure via Terraform CDK. Run from your project root with `npx ocdk`.
 
+Quick example (Python function + API Gateway):
+
+```bash
+mkdir my-python-function && cd my-python-function
+fn init --runtime python
+npm i @mikarinneoracle/oci-cdk
+export OCI_COMPARTMENT_ID='ocid1.compartment.oc1...gq'
+
+# Deploy the function and API Gateway
+npx ocdk deploy --auto-approve
+
+# Call the generated API Gateway REST endpoint (from deploy outputs)
+curl https://<your-api-gateway-endpoint>
+
+# Tail recent execution logs
+npx ocdk tail:execution-log
+```
+
 ## Required
 
+- **Node.js + npm** – `npx ocdk ...` runs via Node. Install a recent LTS (e.g. 20.x+), which includes npm.
 - **OCI CLI** – Configured (e.g. `oci setup config`). Used for auth, OCIR login, and `tail:execution-log`.
 - **Terraform** – Used under the hood by CDKTF for apply/destroy; must be on `PATH` when running `npx ocdk deploy` / `destroy`.
+- **Fn CLI (optional but handy)** – For creating boilerplate functions (`fn init --runtime java|python|node`) and bumping your function version/tag in `func.yaml` with `fn bump`.
 
 ## Environment variables
 

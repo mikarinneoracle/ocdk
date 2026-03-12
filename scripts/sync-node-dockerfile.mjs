@@ -37,7 +37,9 @@ RUN chown -R $(id -u):$(id -g) node_modules`;
 function stripCustomizations(content) {
   const lines = content.split(/\r?\n/);
   const addIdx = lines.findIndex((l) => /ADD\s+package\.json/.test(l));
-  const fromIdx = lines.findIndex((l, idx) => idx > addIdx && /FROM\s+.*fnproject\/node:22\s*$/.test(l.trim()));
+  const fromIdx = lines.findIndex(
+    (l, idx) => idx > addIdx && /^FROM\s+(?:docker\.io\/)?fnproject\/node:22\s*$/i.test(l.trim())
+  );
   if (addIdx === -1 || fromIdx === -1) return content;
   return [...lines.slice(0, addIdx + 1), ...lines.slice(fromIdx)].join('\n');
 }
@@ -47,6 +49,8 @@ function normalizeForCompare(content) {
     .replace(/\r\n/g, '\n')
     .replace(/\r/g, '\n')
     .replace(/\s+as\s+build-stage$/gim, ' AS build-stage')
+    .replace(/[ \t]+$/gm, '') // trim trailing whitespace
+    .replace(/\n{3,}/g, '\n\n') // collapse multiple blank lines
     .trim();
 }
 

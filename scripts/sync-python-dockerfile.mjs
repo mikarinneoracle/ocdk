@@ -53,9 +53,14 @@ if (normalizedFn === normalizedCurrent) {
   process.exit(0);
 }
 
-console.error('Python Dockerfile differs from lib/oci-stack.ts — updating.');
 const newContent = addDockerIoPrefix(fnDockerfile);
+// Only report "updated" if normalized content actually changes (avoids no-op nightly bumps)
+if (normalizeForCompare(newContent) === normalizedCurrent) {
+  console.log('unchanged');
+  process.exit(0);
+}
 
+console.error('Python Dockerfile differs from lib/oci-stack.ts — updating.');
 ociStack =
   ociStack.slice(0, i + markerStart.length) +
   newContent +

@@ -108,10 +108,15 @@ if (normalizedFn === normalizedCurrent) {
   process.exit(0);
 }
 
-console.error('Node Dockerfile differs from lib/oci-stack.ts — updating (injecting ADD package-lock.json* + sed + npm ci/install + chown).');
 let newContent = insertCustomizations(fnWithPrefix, OCKD_NODE_CUSTOMIZATION);
 newContent = newContent.replace(/\s+as\s+build-stage$/gim, ' AS build-stage');
+// Only report "updated" if normalized content actually changes (avoids no-op nightly bumps)
+if (normalizeForCompare(newContent) === normalizedCurrent) {
+  console.log('unchanged');
+  process.exit(0);
+}
 
+console.error('Node Dockerfile differs from lib/oci-stack.ts — updating (injecting ADD package-lock.json* + sed + npm ci/install + chown).');
 ociStack =
   ociStack.slice(0, i + markerStart.length) +
   newContent +

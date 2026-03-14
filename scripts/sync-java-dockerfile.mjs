@@ -72,9 +72,14 @@ if (normalizedFn === normalizedCurrent) {
   process.exit(0);
 }
 
-console.error('Java Dockerfile differs from lib/oci-stack.ts — updating full template.');
 const newFull = getNewFullTemplate(fnDockerfile);
+// Only report "updated" if normalized content actually changes (avoids no-op nightly bumps)
+if (normalizeForCompare(newFull) === normalizedCurrent) {
+  console.log('unchanged');
+  process.exit(0);
+}
 
+console.error('Java Dockerfile differs from lib/oci-stack.ts — updating full template.');
 ociStack =
   ociStack.slice(0, i + markerStart.length) +
   newFull +

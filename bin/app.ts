@@ -14,6 +14,7 @@ import { getOciConfig } from '../config/oci-config';
     tenancyId: ociConfig.tenancyId,
     region: ociConfig.region,
     namespace: ociConfig.namespace,
+    createApigwPolicy: ociConfig.createApigwPolicy,
     functionAppName: ociConfig.functionAppName,
     functionName: ociConfig.functionName,
     functionJarPath: ociConfig.functionJarPath,

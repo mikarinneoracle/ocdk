@@ -47,6 +47,8 @@ export interface OciConfig {
   tenancyId: string;
   region: string;
   namespace: string;
+  /** When true, create IAM policy so API Gateway can invoke Functions. */
+  createApigwPolicy?: boolean;
   functionAppName: string;
   functionName: string;
   /** Path to JAR or Dockerfile context for function image; empty = no build/deploy. */
@@ -541,6 +543,7 @@ export async function getOciConfig(): Promise<OciConfig> {
   const ocirCompartmentId = process.env.OCI_OCIR_COMPARTMENT_ID?.trim() || process.env.OCI_COMPARTMENT_ID?.trim() || compartmentId;
   const tenancyId = process.env.OCI_TENANCY_ID?.trim() || cliConfig.tenancy?.trim() || 'ocid1.tenancy.oc1..aaaaaaa...';
   const region = process.env.OCI_REGION?.trim() || cliConfig.region?.trim() || 'eu-frankfurt-1';
+  const createApigwPolicy = (process.env.OCI_CREATE_APIGW_POLICY || '').trim() === '1';
 
   if (!ocirCompartmentId || ocirCompartmentId.includes('root')) {
     console.warn('⚠️  WARNING: OCI_OCIR_COMPARTMENT_ID not set or set to root compartment.');
@@ -622,6 +625,7 @@ export async function getOciConfig(): Promise<OciConfig> {
     tenancyId,
     region,
     namespace,
+    createApigwPolicy: createApigwPolicy || undefined,
     functionAppName: process.env.OCI_FUNCTION_APP_NAME ?? discovered.functionAppName ?? '',
     functionName: process.env.OCI_FUNCTION_NAME ?? discovered.functionName ?? '',
     functionJarPath: process.env.OCI_FUNCTION_JAR_PATH?.trim() || undefined,

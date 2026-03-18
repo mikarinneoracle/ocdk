@@ -38,6 +38,7 @@ Only **`OCI_COMPARTMENT_ID`** (or `OCI_COMPARTMENT_OCID`) is required for deploy
 | `OCI_TENANCY_ID` | Tenancy OCID | OCI CLI config |
 | `OCI_REGION` | Region (e.g. `eu-frankfurt-1`) | OCI CLI config |
 | `OCI_NAMESPACE` | Object Storage namespace | OCI CLI config or SDK |
+| `OCI_CREATE_APIGW_POLICY` | When `1`, also create the IAM policy so **API Gateway can invoke Functions** | `0` |
 | **OCIR** | | |
 | `OCI_OCIR_COMPARTMENT_ID` | Compartment for OCIR repo (non-root for full stack) | same as `OCI_COMPARTMENT_ID` |
 | `OCI_OCIR_REPOSITORY_NAME` | OCIR repository name | function name (func.yaml) |
@@ -90,6 +91,41 @@ npx ocdk destroy
 - **`npx ocdk deploy`** – Deploy the stack. Options (e.g. `--auto-approve`) are passed through.
 - **`npx ocdk tail:execution-log`** – Tail function execution logs. Resolves log IDs from terraform output or `OCI_LOG_GROUP_ID` / `OCI_EXECUTION_LOG_ID`. Set **`OCI_TAIL_DEBUG=1`** to print debug info to stderr if you get no output. Requires **`OCI_COMPARTMENT_ID`** (or `OCI_COMPARTMENT_OCID`) when run without a project `tail-function-logs.js`.
 - **`npx ocdk destroy`** – Destroy the stack (Terraform destroy) using the same state/backend configuration as deploy. Options (e.g. `--auto-approve`) are passed through.
+
+## IAM plan (API Gateway invoke + log tailing)
+
+When you invoke a Function via **API Gateway**, OCI enforces IAM authorization between the API Gateway service principal and your Function. Separately, when you **tail execution logs**, your caller (usually your *OCI CLI user*, or an automation principal) must be allowed to read log content.
+
+### API Gateway → Functions (required for invoking through API Gateway)
+
+- **Recommended (what `OCI_CREATE_APIGW_POLICY=1` does)**: create a tenancy-level IAM policy that allows API Gateway principals in your compartment to use `functions-family` in the same compartment:
+
+```
+ALLOW any-user to use functions-family in compartment id <functions-compartment-ocid>
+  where ALL {request.principal.type= 'ApiGateway', request.resource.compartment.id = '<api-gateway-compartment-ocid>'}
+```
+
+- **How to enable via this project**:
+
+```bash
+export OCI_CREATE_APIGW_POLICY=1
+npx ocdk deploy --auto-approve
+```
+
+This creates only the policy statement above.
+
+### Tail function execution logs (for `npx ocdk tail:execution-log`)
+
+`tail:execution-log` uses `oci logging-search search-logs` under the hood. The calling principal needs permissions to read log groups and log content.
+
+- **If you run it locally (OCI CLI user)**: grant your user group:
+
+```
+allow group <your-group> to read log-groups in compartment id <compartment-ocid>
+allow group <your-group> to read log-content in compartment id <compartment-ocid>
+```
+
+- **If you run it from automation using a Resource Principal (instance/runner)**: put that resource in a **dynamic group**, and attach the same two statements (replace `group` with `dynamic-group`).
 
 ### GraalVM Java image notes
 

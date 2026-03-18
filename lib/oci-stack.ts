@@ -15,6 +15,7 @@ import { FunctionsApplication } from '../.gen/providers/oci/functions-applicatio
 import { FunctionsFunction } from '../.gen/providers/oci/functions-function';
 import { LoggingLogGroup } from '../.gen/providers/oci/logging-log-group';
 import { LoggingLog } from '../.gen/providers/oci/logging-log';
+import { IdentityPolicy } from '../.gen/providers/oci/identity-policy';
 import { OciBackendConfig, ocirHostKey, getOciImageUrl } from '../config/oci-config';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -92,6 +93,8 @@ export interface OciStackConfig {
   tenancyId: string;
   region: string;
   namespace: string;
+  /** When true, create IAM policy so API Gateway can invoke Functions. */
+  createApigwPolicy?: boolean;
   /** OCI Functions application name (e.g. my-app). Set via OCI_FUNCTION_APP_NAME or pass in config. */
   functionAppName: string;
   /** OCI Function name (e.g. my-function). Set via OCI_FUNCTION_NAME or pass in config. */
@@ -428,6 +431,21 @@ tail-function-logs.js
           subnetId: publicSubnetIdForApiGw,
           endpointType: 'PUBLIC',
           displayName: `${resourceName}-api-gateway`,
+        });
+      }
+
+      // Optional IAM: allow API Gateway to invoke Functions in this compartment.
+      // OCI docs: ALLOW any-user to use functions-family in compartment <functions-compartment>
+      //   where ALL {request.principal.type='ApiGateway', request.resource.compartment.id='<apigw-compartment-ocid>'}
+      if (config.createApigwPolicy && stackAction === 'full-stack') {
+        const apigwPolicyName = `${resourceName}-apigw-functions-access`;
+        new IdentityPolicy(this, 'ApiGatewayFunctionsPolicy', {
+          compartmentId: config.tenancyId,
+          name: apigwPolicyName,
+          description: `Allow API Gateways in ${config.compartmentId} to invoke Functions in ${config.compartmentId}`,
+          statements: [
+            `ALLOW any-user to use functions-family in compartment id ${config.compartmentId} where ALL {request.principal.type= 'ApiGateway', request.resource.compartment.id = '${config.compartmentId}'}`,
+          ],
         });
       }
       const logGroup = new LoggingLogGroup(this, 'LogGroup', {

@@ -437,7 +437,8 @@ tail-function-logs.js
       // Optional IAM: allow API Gateway to invoke Functions in this compartment.
       // OCI docs: ALLOW any-user to use functions-family in compartment <functions-compartment>
       //   where ALL {request.principal.type='ApiGateway', request.resource.compartment.id='<apigw-compartment-ocid>'}
-      if (config.createApigwPolicy && stackAction === 'full-stack') {
+      const createApigwPolicy = !!config.createApigwPolicy || (process.env.OCI_CREATE_APIGW_POLICY || '').trim() === '1';
+      if (createApigwPolicy && stackAction === 'full-stack') {
         const apigwPolicyName = `${resourceName}-apigw-functions-access`;
         new IdentityPolicy(this, 'ApiGatewayFunctionsPolicy', {
           compartmentId: config.tenancyId,

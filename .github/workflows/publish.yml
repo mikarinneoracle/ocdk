@@ -55,9 +55,11 @@ jobs:
           fi
           echo "version_bumped=${bumped}" >> $GITHUB_OUTPUT
 
-      - name: Verify npm version for Trusted Publishing
+      - name: Setup npm for Trusted Publishing
         if: steps.version_flag.outputs.version_bumped == 'true'
         run: |
+          corepack enable
+          corepack prepare npm@11.5.1 --activate
           npm --version
           node -e "const v=require('child_process').execSync('npm --version').toString().trim().split('.').map(Number); const ok=v[0]>11 || (v[0]===11 && (v[1]>5 || (v[1]===5 && v[2]>=1))); if(!ok){console.error('npm 11.5.1+ required for trusted publishing'); process.exit(1);} "
 

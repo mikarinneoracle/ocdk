@@ -55,10 +55,11 @@ jobs:
           fi
           echo "version_bumped=${bumped}" >> $GITHUB_OUTPUT
 
-      # Trusted Publishing requires npm 11.5.1+
-      - name: Use npm for Trusted Publishing
+      - name: Verify npm version for Trusted Publishing
         if: steps.version_flag.outputs.version_bumped == 'true'
-        run: npm install -g npm@latest
+        run: |
+          npm --version
+          node -e "const v=require('child_process').execSync('npm --version').toString().trim().split('.').map(Number); const ok=v[0]>11 || (v[0]===11 && (v[1]>5 || (v[1]===5 && v[2]>=1))); if(!ok){console.error('npm 11.5.1+ required for trusted publishing'); process.exit(1);} "
 
       - name: Publish to npm
         if: steps.version_flag.outputs.version_bumped == 'true'

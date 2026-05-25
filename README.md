@@ -7,7 +7,7 @@ Quick example (Python function + API Gateway):
 ```bash
 mkdir my-python-function && cd my-python-function
 fn init --runtime python
-npm i @mikarinneoracle/oci-cdk
+npm i --ignore-scripts @mikarinneoracle/oci-cdk
 export OCI_COMPARTMENT_ID='ocid1.compartment.oc1...gq'
 
 # Deploy the function and API Gateway
@@ -102,7 +102,7 @@ npx ocdk destroy
 If you only need the utility temporarily, remove it after use:
 
 ```bash
-npm uninstall @mikarinneoracle/oci-cdk
+npm uninstall --ignore-scripts @mikarinneoracle/oci-cdk
 ```
 
 ## IAM plan (API Gateway invoke + log tailing)

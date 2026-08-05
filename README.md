@@ -1,4 +1,4 @@
-# @mikarinneoracle/oci-cdk
+# @mikarinneoracle/oci-cdk-code-only-preview
 
 OCI Functions (Java, Python, Node.js), API Gateway, and related infrastructure via Terraform CDK. Run from your project root with `npx ocdk`.
 
@@ -7,7 +7,7 @@ Quick example (Python function + API Gateway):
 ```bash
 mkdir my-python-function && cd my-python-function
 fn init --runtime python
-npm i --ignore-scripts @mikarinneoracle/oci-cdk
+npm i --ignore-scripts @mikarinneoracle/oci-cdk-code-only-preview
 export OCI_COMPARTMENT_ID='ocid1.compartment.oc1...gq'
 
 # Deploy the function and API Gateway
@@ -141,7 +141,7 @@ Use the same flag or environment variable for deletion. OCDK deletes the CLI-man
 npx ocdk destroy --code-only --auto-approve
 ```
 
-Run from your project root (where your `func.yaml` / function code and `node_modules/@mikarinneoracle/oci-cdk` live):
+Run from your project root (where your `func.yaml` / function code and `node_modules/@mikarinneoracle/oci-cdk-code-only-preview` live):
 
 ```bash
 npx ocdk deploy
@@ -163,7 +163,7 @@ npx ocdk destroy
 If you only need the utility temporarily, remove it after use:
 
 ```bash
-npm uninstall --ignore-scripts @mikarinneoracle/oci-cdk
+npm uninstall --ignore-scripts @mikarinneoracle/oci-cdk-code-only-preview
 ```
 
 ## IAM plan (API Gateway invoke + log tailing)

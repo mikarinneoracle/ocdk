@@ -94,7 +94,7 @@ function preparePackageManifest(archiveRoot) {
   }
 }
 
-function createArchive(functionName) {
+function createArchive(functionName, runtimeName) {
   if (!fs.existsSync(projectDir) || !fs.statSync(projectDir).isDirectory()) {
     fail(`source directory does not exist: ${projectDir}`);
   }
@@ -102,7 +102,9 @@ function createArchive(functionName) {
   const archiveFileName = codeOnlyArchiveFileName(functionName);
   const archivePath = path.join(projectDir, archiveFileName);
   const archiveRoot = path.join(tempDir, 'function');
+  const isNodeRuntime = runtimeName.toLowerCase().startsWith('node');
   const excludedTopLevel = new Set(['node_modules', '.git', '.tools', '.terraform', 'cdktf.out', 'tail-function-logs.js', 'package-lock.json']);
+  if (!isNodeRuntime) excludedTopLevel.add('package.json');
   fs.cpSync(projectDir, archiveRoot, {
     recursive: true,
     filter: (sourcePath) => {
@@ -112,7 +114,7 @@ function createArchive(functionName) {
       return !excludedTopLevel.has(relativePath.split(path.sep)[0]);
     },
   });
-  preparePackageManifest(archiveRoot);
+  if (isNodeRuntime) preparePackageManifest(archiveRoot);
   fs.rmSync(archivePath, { force: true });
   const zip = spawnSync('zip', ['-q', '-r', archivePath, 'function'], { cwd: tempDir, encoding: 'utf8', shell: false });
   if (zip.error || zip.status !== 0) {
@@ -165,7 +167,7 @@ function main() {
   const metadata = readFunctionMetadata();
   const applicationId = (process.env.OCI_FUNCTION_APP_ID || '').trim();
   if (!applicationId) fail('Terraform output OCI_FUNCTION_APP_ID is missing. Run through "ocdk deploy --code-only".');
-  const archive = createArchive(metadata.functionName);
+  const archive = createArchive(metadata.functionName, metadata.runtimeName);
   try {
     const functionId = findFunctionId(applicationId, metadata.functionName);
     const commonArgs = [

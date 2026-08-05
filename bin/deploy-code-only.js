@@ -77,6 +77,23 @@ function codeOnlyArchiveFileName(functionName) {
   return `${safeName || 'function'}.zip`;
 }
 
+function preparePackageManifest(archiveRoot) {
+  const manifestPath = path.join(archiveRoot, 'package.json');
+  if (!fs.existsSync(manifestPath)) return;
+  try {
+    const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+    for (const section of ['dependencies', 'devDependencies', 'optionalDependencies']) {
+      if (!manifest[section]) continue;
+      delete manifest[section]['@mikarinneoracle/oci-cdk-code-only-preview'];
+      delete manifest[section]['@mikarinneoracle/oci-cdk'];
+      if (Object.keys(manifest[section]).length === 0) delete manifest[section];
+    }
+    fs.writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, 'utf8');
+  } catch {
+    fail('could not read package.json while preparing the code-only archive.');
+  }
+}
+
 function createArchive(functionName) {
   if (!fs.existsSync(projectDir) || !fs.statSync(projectDir).isDirectory()) {
     fail(`source directory does not exist: ${projectDir}`);
@@ -85,7 +102,7 @@ function createArchive(functionName) {
   const archiveFileName = codeOnlyArchiveFileName(functionName);
   const archivePath = path.join(projectDir, archiveFileName);
   const archiveRoot = path.join(tempDir, 'function');
-  const excludedTopLevel = new Set(['node_modules', '.git', '.tools', '.terraform', 'cdktf.out', 'tail-function-logs.js']);
+  const excludedTopLevel = new Set(['node_modules', '.git', '.tools', '.terraform', 'cdktf.out', 'tail-function-logs.js', 'package-lock.json']);
   fs.cpSync(projectDir, archiveRoot, {
     recursive: true,
     filter: (sourcePath) => {
@@ -95,6 +112,7 @@ function createArchive(functionName) {
       return !excludedTopLevel.has(relativePath.split(path.sep)[0]);
     },
   });
+  preparePackageManifest(archiveRoot);
   fs.rmSync(archivePath, { force: true });
   const zip = spawnSync('zip', ['-q', '-r', archivePath, 'function'], { cwd: tempDir, encoding: 'utf8', shell: false });
   if (zip.error || zip.status !== 0) {

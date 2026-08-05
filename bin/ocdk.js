@@ -122,18 +122,15 @@ if (command === 'tail:execution-log') {
   const projectDir = process.cwd();
   const projectScript = path.join(projectDir, 'tail-function-logs.js');
   if (fs.existsSync(projectScript)) {
-    // A stack synth creates a placeholder script. Refresh it from Terraform
-    // outputs before executing so it never masks the working fallback tailer.
-    const projectScriptContent = fs.readFileSync(projectScript, 'utf8');
-    if (projectScriptContent.includes('__EXECUTION_LOG_ID__') || projectScriptContent.includes('__LOG_GROUP_ID__')) {
-      const configureLogs = spawnSync('node', [path.join(root, 'bin', 'write-log-config.js')], {
-        stdio: 'inherit',
-        cwd: projectDir,
-        shell: false,
-        env: process.env,
-      });
-      if (configureLogs.status !== 0) process.exit(configureLogs.status ?? 1);
-    }
+    // Refresh on every run. Older generated scripts can have empty defaults
+    // instead of placeholders, so inspecting their content is not reliable.
+    const configureLogs = spawnSync('node', [path.join(root, 'bin', 'write-log-config.js')], {
+      stdio: 'inherit',
+      cwd: projectDir,
+      shell: false,
+      env: process.env,
+    });
+    if (configureLogs.status !== 0) process.exit(configureLogs.status ?? 1);
     const result = spawnSync('node', [projectScript, ...args.slice(1)], {
       stdio: 'inherit',
       cwd: projectDir,

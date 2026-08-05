@@ -85,7 +85,7 @@ function createArchive(functionName) {
   const archiveFileName = codeOnlyArchiveFileName(functionName);
   const archivePath = path.join(projectDir, archiveFileName);
   const archiveRoot = path.join(tempDir, 'function');
-  const excludedTopLevel = new Set(['node_modules', '.git', '.tools', '.terraform', 'cdktf.out']);
+  const excludedTopLevel = new Set(['node_modules', '.git', '.tools', '.terraform', 'cdktf.out', 'tail-function-logs.js']);
   fs.cpSync(projectDir, archiveRoot, {
     recursive: true,
     filter: (sourcePath) => {

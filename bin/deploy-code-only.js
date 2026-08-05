@@ -54,8 +54,13 @@ function readFunctionMetadata() {
   const yaml = fs.existsSync(funcYamlPath) ? fs.readFileSync(funcYamlPath, 'utf8') : '';
   const functionName = (process.env.OCI_FUNCTION_NAME || yamlValue(yaml, 'name')).trim();
   const appName = (process.env.OCI_FUNCTION_APP_NAME || functionName).trim();
-  const handler = (process.env.OCI_FUNCTION_HANDLER || yamlValue(yaml, 'cmd') || yamlValue(yaml, 'entrypoint')).trim();
   const runtimeName = (process.env.OCI_CODE_ONLY_RUNTIME_NAME || '').trim();
+  const configuredHandler = (process.env.OCI_FUNCTION_HANDLER || yamlValue(yaml, 'cmd') || yamlValue(yaml, 'entrypoint')).trim();
+  // The managed Node runtime already invokes `node`; its handler is the script
+  // path, whereas a conventional func.yaml entrypoint is `node func.js`.
+  const handler = runtimeName.toLowerCase().startsWith('node')
+    ? configuredHandler.replace(/^node\s+/, '')
+    : configuredHandler;
   const memory = integerValue(process.env.OCI_FUNCTION_MEMORY_MB || yamlValue(yaml, 'memory'), 'OCI_FUNCTION_MEMORY_MB', 256);
   const timeout = integerValue(process.env.OCI_FUNCTION_TIMEOUT_SECONDS || yamlValue(yaml, 'timeout'), 'OCI_FUNCTION_TIMEOUT_SECONDS', 30);
 

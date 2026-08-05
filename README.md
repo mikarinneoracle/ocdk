@@ -124,14 +124,14 @@ export OCI_FUNCTION_HANDLER='func.handler'
 npx ocdk deploy --auto-approve --code-only
 ```
 
-For a Node.js function, use the Node launch command as the handler (not `fdk.handle`):
+For a Node.js function, use the JavaScript file as the handler (not `fdk.handle` or `node func.js`):
 
 ```bash
 export OCI_CODE_ONLY_RUNTIME_NAME='node24.ol9'
-export OCI_FUNCTION_HANDLER='node func.js'
+export OCI_FUNCTION_HANDLER='func.js'
 ```
 
-The equivalent `func.yaml` configuration is supported too, so the handler environment variable is unnecessary when this file contains `entrypoint: node func.js`:
+The equivalent conventional `func.yaml` configuration is supported too. OCDK converts `entrypoint: node func.js` to the required code-only handler `func.js`:
 
 ```yaml
 schema_version: 20180708

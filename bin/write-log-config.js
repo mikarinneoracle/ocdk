@@ -10,7 +10,7 @@ const fs = require('fs');
 const packageRoot = path.join(__dirname, '..');
 const projectRoot = process.cwd();
 const stackName = process.env.OCI_STACK_NAME || 'oci-stack';
-const stackDir = path.join(projectRoot, 'node_modules', '@mikarinneoracle', 'oci-cdk', 'cdktf.out', 'stacks', stackName);
+const stackDir = path.join(packageRoot, 'cdktf.out', 'stacks', stackName);
 
 if (!fs.existsSync(stackDir)) {
   console.error('Stack directory not found:', stackDir);

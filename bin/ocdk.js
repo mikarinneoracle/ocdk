@@ -180,7 +180,17 @@ if (command === 'deploy' && codeOnlyEnabled) {
     shell: false,
     env: { ...env, OCI_FUNCTION_APP_ID: functionAppId },
   });
-  process.exit(result.status ?? 1);
+  if (result.status !== 0) process.exit(result.status ?? 1);
+  const logConfig = spawnSync('node', [path.join(root, 'bin', 'write-log-config.js')], {
+    stdio: 'inherit',
+    cwd: projectDir,
+    shell: false,
+    env,
+  });
+  if (logConfig.status !== 0) {
+    console.warn('Code-only function deployed, but log-tail configuration could not be written. Run: npx ocdk write-log-config');
+  }
+  process.exit(0);
 }
 
 // Destroy the CLI-managed archive function before Terraform destroys its

@@ -135,6 +135,8 @@ These settings are optional: `OCI_CODE_ONLY_SOURCE_DIR` (defaults to the current
 
 Each deploy re-builds `<function-name>.zip` in the project root and uploads that file. The ZIP has the required `function/` directory at its root, includes source files, and excludes `node_modules`, `.git`, `.tools`, `.terraform`, and `cdktf.out`. A successful code-only destroy removes this ZIP after Terraform has destroyed the Function App and infrastructure. The current preview path is function-only: it does not create an API Gateway because the CLI-managed function OCID is not in Terraform state.
 
+After a successful code-only deploy, OCDK writes the log IDs for `npx ocdk tail:execution-log` automatically.
+
 Use the same flag or environment variable for deletion. OCDK deletes the CLI-managed function first, then lets Terraform destroy the Function App and its infrastructure:
 
 ```bash

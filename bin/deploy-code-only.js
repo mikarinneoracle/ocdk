@@ -73,14 +73,17 @@ function createArchive() {
   }
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ocdk-code-only-'));
   const archivePath = path.join(tempDir, 'function-source.zip');
-  const zip = spawnSync('zip', [
-    '-q', '-r', archivePath, '.',
-    '-x', 'node_modules/*',
-    '-x', '.git/*',
-    '-x', '.tools/*',
-    '-x', '.terraform/*',
-    '-x', 'cdktf.out/*',
-  ], { cwd: projectDir, encoding: 'utf8', shell: false });
+  const archiveRoot = path.join(tempDir, 'function');
+  const excludedTopLevel = new Set(['node_modules', '.git', '.tools', '.terraform', 'cdktf.out']);
+  fs.cpSync(projectDir, archiveRoot, {
+    recursive: true,
+    filter: (sourcePath) => {
+      const relativePath = path.relative(projectDir, sourcePath);
+      if (!relativePath) return true;
+      return !excludedTopLevel.has(relativePath.split(path.sep)[0]);
+    },
+  });
+  const zip = spawnSync('zip', ['-q', '-r', archivePath, 'function'], { cwd: tempDir, encoding: 'utf8', shell: false });
   if (zip.error || zip.status !== 0) {
     fs.rmSync(tempDir, { recursive: true, force: true });
     fail(`could not create source archive with zip: ${zip.stderr?.trim() || zip.error?.message || 'unknown error'}`);

@@ -133,7 +133,7 @@ export OCI_FUNCTION_APP_NAME='my-existing-function-app'
 
 These settings are optional: `OCI_CODE_ONLY_SOURCE_DIR` (defaults to the current directory), `OCI_FUNCTION_MEMORY_MB` (from `func.yaml`, otherwise `256`), and `OCI_FUNCTION_TIMEOUT_SECONDS` (from `func.yaml`, otherwise `30`). `OCI_TENANCY_ID`, `OCI_REGION`, and `OCI_NAMESPACE` are also optional when they can be resolved from the active OCI CLI profile.
 
-The archive is built from `OCI_CODE_ONLY_SOURCE_DIR` (or the current directory). It includes source files and excludes `node_modules`, `.git`, `.tools`, `.terraform`, and `cdktf.out`. The current preview path is function-only: it does not create an API Gateway because the CLI-managed function OCID is not in Terraform state.
+The archive is built from `OCI_CODE_ONLY_SOURCE_DIR` (or the current directory) with the required `function/` directory at its ZIP root. It includes source files and excludes `node_modules`, `.git`, `.tools`, `.terraform`, and `cdktf.out`. The current preview path is function-only: it does not create an API Gateway because the CLI-managed function OCID is not in Terraform state.
 
 Use the same flag or environment variable for deletion. OCDK deletes the CLI-managed function first, then lets Terraform destroy the Function App and its infrastructure:
 

@@ -3,29 +3,49 @@
  * Write tail-function-logs.js to the project root with log IDs from terraform output.
  * Run from project root after deploy. Usage: npx ocdk write-log-config
  */
-const { execSync } = require('child_process');
+const { spawnSync } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 
 const packageRoot = path.join(__dirname, '..');
 const projectRoot = process.cwd();
 const stackName = process.env.OCI_STACK_NAME || 'oci-stack';
-const stackDir = path.join(packageRoot, 'cdktf.out', 'stacks', stackName);
-
-if (!fs.existsSync(stackDir)) {
-  console.error('Stack directory not found:', stackDir);
-  console.error('Run from your project root after "npx ocdk deploy". Ensure the stack is deployed.');
-  process.exit(1);
+function outputValue(value, key) {
+  if (!value || typeof value !== 'object') return undefined;
+  if (Object.prototype.hasOwnProperty.call(value, key)) {
+    const output = value[key];
+    if (typeof output === 'string') return output;
+    if (output && typeof output === 'object' && typeof output.value === 'string') return output.value;
+  }
+  for (const child of Object.values(value)) {
+    const found = outputValue(child, key);
+    if (found) return found;
+  }
+  return undefined;
 }
 
+const tempDir = fs.mkdtempSync(path.join(require('os').tmpdir(), 'ocdk-log-output-'));
+const outputFile = path.join(tempDir, 'outputs.json');
 let logGroupId;
 let executionLogId;
 try {
-  logGroupId = execSync(`terraform output -raw log_group_id`, { encoding: 'utf8', cwd: stackDir }).trim();
-  executionLogId = execSync(`terraform output -raw execution_log_id`, { encoding: 'utf8', cwd: stackDir }).trim();
-} catch (e) {
-  console.error('Could not read terraform outputs. Ensure the stack is deployed and terraform is on PATH.');
+  const result = spawnSync('npm', ['run', '--silent', 'cdktf', '--', 'output', stackName, '--outputs-file', outputFile], {
+    cwd: packageRoot,
+    encoding: 'utf8',
+    shell: false,
+  });
+  if (result.status !== 0 || !fs.existsSync(outputFile)) {
+    throw new Error((result.stderr || result.stdout || '').trim() || 'cdktf output did not produce an output file.');
+  }
+  const outputs = JSON.parse(fs.readFileSync(outputFile, 'utf8'));
+  logGroupId = outputValue(outputs, 'log_group_id');
+  executionLogId = outputValue(outputs, 'execution_log_id');
+} catch (error) {
+  fs.rmSync(tempDir, { recursive: true, force: true });
+  console.error(`Could not read Terraform outputs: ${error.message}`);
   process.exit(1);
+} finally {
+  fs.rmSync(tempDir, { recursive: true, force: true });
 }
 
 if (!logGroupId || !executionLogId) {

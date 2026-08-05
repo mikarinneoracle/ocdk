@@ -86,10 +86,17 @@ Only **`OCI_COMPARTMENT_ID`** (or `OCI_COMPARTMENT_OCID`) is required for deploy
 
 ### Using an OCI CLI preview installation
 
-Choose a non-default CLI executable without changing your shell `PATH`:
+Choose a non-default CLI executable without changing your shell `PATH`. `OCI_CLI_PATH` must be the absolute path to the preview binary, not merely the directory containing it:
 
 ```bash
-export OCI_CLI_PATH="$PWD/.tools/oci-preview-bin/oci"
+export OCI_CLI_PATH="/absolute/path/to/oci-preview-bin/oci"
+"$OCI_CLI_PATH" --version
+```
+
+For the repository-local preview installation used in this checkout:
+
+```bash
+export OCI_CLI_PATH="/Users/MRINNE/projects/ocdk/.tools/oci-preview-bin/oci"
 ```
 
 The repository-local preview installation is required only for preview-only features such as Code-only Functions. Regular deployments continue to use `oci` from `PATH` unless `OCI_CLI_PATH` is set.
@@ -101,14 +108,30 @@ Code-only deployment first uses Terraform to create or manage the Function Appli
 Activate the path with either `-code-only`, `--code-only`, or `OCI_CODE_ONLY=1`. The compatibility environment key `code-only=1` is also recognized when a process launcher can set a hyphenated environment name.
 
 ```bash
-export OCI_CLI_PATH="$PWD/.tools/oci-preview-bin/oci"
+# Required: OCI CLI preview binary
+export OCI_CLI_PATH="/Users/MRINNE/projects/ocdk/.tools/oci-preview-bin/oci"
+"$OCI_CLI_PATH" --version
+
+# Required: OCI target
 export OCI_COMPARTMENT_ID='ocid1.compartment.oc1...'
-export OCI_FUNCTION_APP_NAME='hello-arm'
-export OCI_FUNCTION_NAME='my-function'
+
+# Required: code-only runtime and handler
 export OCI_CODE_ONLY_RUNTIME_NAME='python312.ol9'
 export OCI_FUNCTION_HANDLER='func.handler'
-npx ocdk deploy --code-only
+
+# Required in func.yaml: name: my-function
+# Terraform creates the Function App; OCI CLI preview uploads the ZIP function
+npx ocdk deploy --auto-approve --code-only
 ```
+
+By default, the function name and Function App name both come from `func.yaml`'s `name`. Set these only to override that default or to use a differently named existing Function App:
+
+```bash
+export OCI_FUNCTION_NAME='my-function'
+export OCI_FUNCTION_APP_NAME='my-existing-function-app'
+```
+
+These settings are optional: `OCI_CODE_ONLY_SOURCE_DIR` (defaults to the current directory), `OCI_FUNCTION_MEMORY_MB` (from `func.yaml`, otherwise `256`), and `OCI_FUNCTION_TIMEOUT_SECONDS` (from `func.yaml`, otherwise `30`). `OCI_TENANCY_ID`, `OCI_REGION`, and `OCI_NAMESPACE` are also optional when they can be resolved from the active OCI CLI profile.
 
 The archive is built from `OCI_CODE_ONLY_SOURCE_DIR` (or the current directory). It includes source files and excludes `node_modules`, `.git`, `.tools`, `.terraform`, and `cdktf.out`. The current preview path is function-only: it does not create an API Gateway because the CLI-managed function OCID is not in Terraform state.
 

@@ -16,13 +16,15 @@ function debug(...args) {
 }
 
 // Defaults: in-code (injected by npx ocdk write-log-config when writing tail-function-logs.js) or env vars. Placeholders become empty.
+const EXECUTION_LOG_ID_PLACEHOLDER = ['__EXECUTION', '_LOG_ID__'].join('');
+const LOG_GROUP_ID_PLACEHOLDER = ['__LOG', '_GROUP_ID__'].join('');
 let DEFAULT_EXECUTION_LOG_ID = '__EXECUTION_LOG_ID__';
 let DEFAULT_LOG_GROUP_ID = '__LOG_GROUP_ID__';
 if (DEBUG) {
-  debug('in-code defaults: execution_log=', DEFAULT_EXECUTION_LOG_ID === '__EXECUTION_LOG_ID__' ? 'placeholder' : 'set', 'log_group=', DEFAULT_LOG_GROUP_ID === '__LOG_GROUP_ID__' ? 'placeholder' : 'set');
+  debug('in-code defaults: execution_log=', DEFAULT_EXECUTION_LOG_ID === EXECUTION_LOG_ID_PLACEHOLDER ? 'placeholder' : 'set', 'log_group=', DEFAULT_LOG_GROUP_ID === LOG_GROUP_ID_PLACEHOLDER ? 'placeholder' : 'set');
 }
-if (DEFAULT_EXECUTION_LOG_ID === '__EXECUTION_LOG_ID__') DEFAULT_EXECUTION_LOG_ID = '';
-if (DEFAULT_LOG_GROUP_ID === '__LOG_GROUP_ID__') DEFAULT_LOG_GROUP_ID = '';
+if (DEFAULT_EXECUTION_LOG_ID === EXECUTION_LOG_ID_PLACEHOLDER) DEFAULT_EXECUTION_LOG_ID = '';
+if (DEFAULT_LOG_GROUP_ID === LOG_GROUP_ID_PLACEHOLDER) DEFAULT_LOG_GROUP_ID = '';
 if (DEBUG) {
   debug('final execution_log:', DEFAULT_EXECUTION_LOG_ID ? `${DEFAULT_EXECUTION_LOG_ID.slice(0, 30)}...` : '(empty)', 'log_group:', DEFAULT_LOG_GROUP_ID ? `${DEFAULT_LOG_GROUP_ID.slice(0, 30)}...` : '(empty)');
 }

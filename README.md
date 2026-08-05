@@ -124,6 +124,22 @@ export OCI_FUNCTION_HANDLER='func.handler'
 npx ocdk deploy --auto-approve --code-only
 ```
 
+#### Find the available code-only runtimes
+
+The exact `OCI_CODE_ONLY_RUNTIME_NAME` values are enabled per tenancy and region during this Limited Availability preview. Query the Preview CLI instead of copying a runtime name from another environment:
+
+```bash
+# List every runtime available to the active OCI profile
+"$OCI_CLI_PATH" fn runtime list --all --output table
+
+# Narrow the list to one language, for example Python, Node.js, or Java
+"$OCI_CLI_PATH" fn runtime list --all --language python --output table
+"$OCI_CLI_PATH" fn runtime list --all --language node --output table
+"$OCI_CLI_PATH" fn runtime list --all --language java --output table
+```
+
+OCI Functions supports Java, Python, Node.js, Go, Ruby, and C# FDKs in general; code-only availability is limited to the runtimes returned by the command above. See Oracle's [supported language versions](https://docs.oracle.com/en-us/iaas/Content/Functions/Tasks/languagessupportedbyfunctions.htm).
+
 By default, the function name and Function App name both come from `func.yaml`'s `name`. Set these only to override that default or to use a differently named existing Function App:
 
 ```bash

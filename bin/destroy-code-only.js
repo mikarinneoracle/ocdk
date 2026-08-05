@@ -46,23 +46,17 @@ function resourceDisplayName(resource) {
 }
 
 function main() {
-  const compartmentId = (process.env.OCI_COMPARTMENT_ID || process.env.OCI_COMPARTMENT_OCID || '').trim();
-  if (!compartmentId) fail('set OCI_COMPARTMENT_ID (or OCI_COMPARTMENT_OCID).');
   const funcYamlPath = path.join(projectDir, 'func.yaml');
   const yaml = fs.existsSync(funcYamlPath) ? fs.readFileSync(funcYamlPath, 'utf8') : '';
   const functionName = (process.env.OCI_FUNCTION_NAME || yamlValue(yaml, 'name')).trim();
   const appName = (process.env.OCI_FUNCTION_APP_NAME || functionName).trim();
   if (!functionName) fail('set OCI_FUNCTION_NAME or add name: to func.yaml.');
   if (!appName) fail('set OCI_FUNCTION_APP_NAME.');
+  const applicationId = (process.env.OCI_FUNCTION_APP_ID || '').trim();
+  if (!applicationId) fail('Terraform output OCI_FUNCTION_APP_ID is missing. Run through "ocdk destroy --code-only".');
 
   const version = runOci(['--version']).trim();
-  const apps = jsonOci(['fn', 'application', 'list', '--compartment-id', compartmentId, '--all']).data || [];
-  const app = apps.find((item) => resourceDisplayName(item) === appName);
-  if (!app) {
-    console.log(`Functions Application ${appName} is absent; no code-only function needs deletion.`);
-    return;
-  }
-  const functions = jsonOci(['fn', 'function', 'list', '--application-id', app.id, '--all']).data || [];
+  const functions = jsonOci(['fn', 'function', 'list', '--application-id', applicationId, '--all']).data || [];
   const matches = functions.filter((item) => resourceDisplayName(item) === functionName);
   if (matches.length === 0) {
     console.log(`Code-only function ${functionName} is absent; continuing with Terraform destroy.`);

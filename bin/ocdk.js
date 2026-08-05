@@ -6,6 +6,7 @@
 
 const { spawnSync } = require('child_process');
 const path = require('path');
+const os = require('os');
 
 const fs = require('fs');
 const root = path.join(__dirname, '..');
@@ -17,6 +18,44 @@ const codeOnlyEnabled =
   process.env['code-only'] === '1' ||
   args.includes('-code-only') ||
   args.includes('--code-only');
+
+function findFunctionAppId(value) {
+  if (!value || typeof value !== 'object') return undefined;
+  if (Object.prototype.hasOwnProperty.call(value, 'function_app_id')) {
+    const output = value.function_app_id;
+    if (typeof output === 'string') return output;
+    if (output && typeof output === 'object' && typeof output.value === 'string') return output.value;
+  }
+  for (const child of Object.values(value)) {
+    const found = findFunctionAppId(child);
+    if (found) return found;
+  }
+  return undefined;
+}
+
+function resolveCodeOnlyFunctionAppId(env) {
+  if (env.OCI_FUNCTION_APP_ID?.trim()) return env.OCI_FUNCTION_APP_ID.trim();
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ocdk-function-app-output-'));
+  const outputFile = path.join(tempDir, 'outputs.json');
+  const stackName = env.OCI_STACK_NAME || 'oci-stack';
+  try {
+    const result = spawnSync('npm', ['run', '--silent', 'cdktf', '--', 'output', stackName, '--outputs-file', outputFile], {
+      cwd: root,
+      env,
+      encoding: 'utf8',
+      shell: false,
+    });
+    if (result.status !== 0 || !fs.existsSync(outputFile)) {
+      const detail = (result.stderr || result.stdout || '').trim();
+      throw new Error(detail || 'cdktf output did not produce an output file.');
+    }
+    const appId = findFunctionAppId(JSON.parse(fs.readFileSync(outputFile, 'utf8')));
+    if (!appId) throw new Error('Terraform output "function_app_id" is missing.');
+    return appId;
+  } finally {
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  }
+}
 
 const npmRunCommands = ['deploy', 'diff', 'synth', 'destroy', 'list', 'get'];
 
@@ -112,11 +151,18 @@ if (command === 'deploy' && codeOnlyEnabled) {
     env,
   });
   if (infrastructure.status !== 0) process.exit(infrastructure.status ?? 1);
+  let functionAppId;
+  try {
+    functionAppId = resolveCodeOnlyFunctionAppId(env);
+  } catch (error) {
+    console.error(`Code-only deploy failed: could not read Terraform Function App output: ${error.message}`);
+    process.exit(1);
+  }
   const result = spawnSync('node', [script], {
     stdio: 'inherit',
     cwd: projectDir,
     shell: false,
-    env,
+    env: { ...env, OCI_FUNCTION_APP_ID: functionAppId },
   });
   process.exit(result.status ?? 1);
 }
@@ -137,11 +183,18 @@ if (command === 'destroy' && codeOnlyEnabled) {
     OCI_STACK_ACTION: 'function-only',
     OCI_PROJECT_DIR: projectDir,
   };
+  let functionAppId;
+  try {
+    functionAppId = resolveCodeOnlyFunctionAppId(env);
+  } catch (error) {
+    console.error(`Code-only destroy failed: could not read Terraform Function App output: ${error.message}`);
+    process.exit(1);
+  }
   const functionDestroy = spawnSync('node', [script], {
     stdio: 'inherit',
     cwd: projectDir,
     shell: false,
-    env,
+    env: { ...env, OCI_FUNCTION_APP_ID: functionAppId },
   });
   if (functionDestroy.status !== 0) process.exit(functionDestroy.status ?? 1);
   const infrastructure = spawnSync('npm', ['run', '--silent', 'destroy', '--', ...passthroughArgs], {

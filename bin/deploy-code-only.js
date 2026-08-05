@@ -105,16 +105,6 @@ function resourceDisplayName(resource) {
   return resource.displayName || resource['display-name'] || '';
 }
 
-function findApplicationId(compartmentId, appName) {
-  const result = jsonOci(['fn', 'application', 'list', '--compartment-id', compartmentId, '--all']);
-  const matches = (result.data || []).filter((app) => resourceDisplayName(app) === appName);
-  if (matches.length === 0) {
-    fail(`Functions Application "${appName}" was not found. Code-only deploy requires an existing application.`);
-  }
-  if (matches.length > 1) fail(`multiple Functions Applications are named "${appName}"; use a unique application name.`);
-  return matches[0].id;
-}
-
 function findFunctionId(applicationId, functionName) {
   const result = jsonOci(['fn', 'function', 'list', '--application-id', applicationId, '--all']);
   const matches = (result.data || []).filter((fn) => resourceDisplayName(fn) === functionName);
@@ -134,12 +124,10 @@ function verifyPreviewCli() {
 function main() {
   const unexpectedArgs = process.argv.slice(2).filter((arg) => arg !== '--auto-approve');
   if (unexpectedArgs.length) fail(`unsupported code-only deploy option(s): ${unexpectedArgs.join(', ')}`);
-  const compartmentId = (process.env.OCI_COMPARTMENT_ID || process.env.OCI_COMPARTMENT_OCID || '').trim();
-  if (!compartmentId) fail('set OCI_COMPARTMENT_ID (or OCI_COMPARTMENT_OCID).');
-
   verifyPreviewCli();
   const metadata = readFunctionMetadata();
-  const applicationId = findApplicationId(compartmentId, metadata.appName);
+  const applicationId = (process.env.OCI_FUNCTION_APP_ID || '').trim();
+  if (!applicationId) fail('Terraform output OCI_FUNCTION_APP_ID is missing. Run through "ocdk deploy --code-only".');
   const archive = createArchive();
   try {
     const functionId = findFunctionId(applicationId, metadata.functionName);

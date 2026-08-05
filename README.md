@@ -132,10 +132,10 @@ The exact `OCI_CODE_ONLY_RUNTIME_NAME` values are enabled per tenancy and region
 # List every runtime available to the active OCI profile
 "$OCI_CLI_PATH" fn runtime list --all --output table
 
-# Narrow the list to one language, for example Python, Node.js, or Java
-"$OCI_CLI_PATH" fn runtime list --all --language python --output table
-"$OCI_CLI_PATH" fn runtime list --all --language node --output table
-"$OCI_CLI_PATH" fn runtime list --all --language java --output table
+# Narrow the list by runtime-name prefix, for example Python, Node.js, or Java
+"$OCI_CLI_PATH" fn runtime list --all --name-starts-with python --output table
+"$OCI_CLI_PATH" fn runtime list --all --name-starts-with node --output table
+"$OCI_CLI_PATH" fn runtime list --all --name-starts-with java --output table
 ```
 
 OCI Functions supports Java, Python, Node.js, Go, Ruby, and C# FDKs in general; code-only availability is limited to the runtimes returned by the command above. See Oracle's [supported language versions](https://docs.oracle.com/en-us/iaas/Content/Functions/Tasks/languagessupportedbyfunctions.htm).

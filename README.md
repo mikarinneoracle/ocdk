@@ -124,6 +124,24 @@ export OCI_FUNCTION_HANDLER='func.handler'
 npx ocdk deploy --auto-approve --code-only
 ```
 
+For a Node.js function, use the Node launch command as the handler (not `fdk.handle`):
+
+```bash
+export OCI_CODE_ONLY_RUNTIME_NAME='node24.ol9'
+export OCI_FUNCTION_HANDLER='node func.js'
+```
+
+The equivalent `func.yaml` configuration is supported too, so the handler environment variable is unnecessary when this file contains `entrypoint: node func.js`:
+
+```yaml
+schema_version: 20180708
+name: my-node-function
+runtime: node
+entrypoint: node func.js
+```
+
+Keep `@fnproject/fdk` in `package.json` dependencies. The function source file uses `fdk.handle(...)`; it is not the OCI handler value.
+
 #### Find the available code-only runtimes
 
 The exact `OCI_CODE_ONLY_RUNTIME_NAME` values are enabled per tenancy and region during this Limited Availability preview. Query the Preview CLI instead of copying a runtime name from another environment:

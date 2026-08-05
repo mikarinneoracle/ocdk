@@ -54,7 +54,7 @@ function readFunctionMetadata() {
   const yaml = fs.existsSync(funcYamlPath) ? fs.readFileSync(funcYamlPath, 'utf8') : '';
   const functionName = (process.env.OCI_FUNCTION_NAME || yamlValue(yaml, 'name')).trim();
   const appName = (process.env.OCI_FUNCTION_APP_NAME || functionName).trim();
-  const handler = (process.env.OCI_FUNCTION_HANDLER || yamlValue(yaml, 'cmd')).trim();
+  const handler = (process.env.OCI_FUNCTION_HANDLER || yamlValue(yaml, 'cmd') || yamlValue(yaml, 'entrypoint')).trim();
   const runtimeName = (process.env.OCI_CODE_ONLY_RUNTIME_NAME || '').trim();
   const memory = integerValue(process.env.OCI_FUNCTION_MEMORY_MB || yamlValue(yaml, 'memory'), 'OCI_FUNCTION_MEMORY_MB', 256);
   const timeout = integerValue(process.env.OCI_FUNCTION_TIMEOUT_SECONDS || yamlValue(yaml, 'timeout'), 'OCI_FUNCTION_TIMEOUT_SECONDS', 30);

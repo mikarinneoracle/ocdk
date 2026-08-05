@@ -36,6 +36,10 @@ function yamlValue(contents, key) {
   return (match?.[1] || match?.[2] || '').trim();
 }
 
+function resourceDisplayName(resource) {
+  return resource.displayName || resource['display-name'] || '';
+}
+
 function main() {
   const compartmentId = (process.env.OCI_COMPARTMENT_ID || process.env.OCI_COMPARTMENT_OCID || '').trim();
   if (!compartmentId) fail('set OCI_COMPARTMENT_ID (or OCI_COMPARTMENT_OCID).');
@@ -48,13 +52,13 @@ function main() {
 
   const version = runOci(['--version']).trim();
   const apps = jsonOci(['fn', 'application', 'list', '--compartment-id', compartmentId, '--all']).data || [];
-  const app = apps.find((item) => item.displayName === appName);
+  const app = apps.find((item) => resourceDisplayName(item) === appName);
   if (!app) {
     console.log(`Functions Application ${appName} is absent; no code-only function needs deletion.`);
     return;
   }
   const functions = jsonOci(['fn', 'function', 'list', '--application-id', app.id, '--all']).data || [];
-  const matches = functions.filter((item) => item.displayName === functionName);
+  const matches = functions.filter((item) => resourceDisplayName(item) === functionName);
   if (matches.length === 0) {
     console.log(`Code-only function ${functionName} is absent; continuing with Terraform destroy.`);
     return;

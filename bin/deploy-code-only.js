@@ -97,9 +97,13 @@ function jsonOci(args) {
   }
 }
 
+function resourceDisplayName(resource) {
+  return resource.displayName || resource['display-name'] || '';
+}
+
 function findApplicationId(compartmentId, appName) {
   const result = jsonOci(['fn', 'application', 'list', '--compartment-id', compartmentId, '--all']);
-  const matches = (result.data || []).filter((app) => app.displayName === appName);
+  const matches = (result.data || []).filter((app) => resourceDisplayName(app) === appName);
   if (matches.length === 0) {
     fail(`Functions Application "${appName}" was not found. Code-only deploy requires an existing application.`);
   }
@@ -109,7 +113,7 @@ function findApplicationId(compartmentId, appName) {
 
 function findFunctionId(applicationId, functionName) {
   const result = jsonOci(['fn', 'function', 'list', '--application-id', applicationId, '--all']);
-  const matches = (result.data || []).filter((fn) => fn.displayName === functionName);
+  const matches = (result.data || []).filter((fn) => resourceDisplayName(fn) === functionName);
   if (matches.length > 1) fail(`multiple functions are named "${functionName}" in the selected application.`);
   return matches[0]?.id;
 }

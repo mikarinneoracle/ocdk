@@ -154,11 +154,25 @@ if (command === 'deploy' && codeOnlyEnabled) {
     console.error('Missing script: "deploy-code-only". Update @mikarinneoracle/oci-cdk.');
     process.exit(1);
   }
-  const env = {
+  const requestedStackAction = (process.env.OCI_STACK_ACTION || 'full-stack').trim().toLowerCase();
+  const wantsFullStack = requestedStackAction !== 'function-only' && requestedStackAction !== 'function';
+  const baseEnv = {
     ...process.env,
     OCI_CODE_ONLY: '1',
-    OCI_STACK_ACTION: 'function-only',
     OCI_PROJECT_DIR: projectDir,
+  };
+  // On a new project, create the Function App first. Later code-only deploys
+  // keep the full Terraform graph, including the existing API Gateway route.
+  let hasFunctionApp = false;
+  try {
+    resolveCodeOnlyFunctionAppId(baseEnv);
+    hasFunctionApp = true;
+  } catch {
+    // No state/output yet: the bootstrap Terraform pass creates the app.
+  }
+  const env = {
+    ...baseEnv,
+    OCI_STACK_ACTION: hasFunctionApp ? requestedStackAction : 'function-only',
   };
   const infrastructure = spawnSync('npm', ['run', '--silent', 'deploy', '--', ...passthroughArgs], {
     stdio: 'inherit',
@@ -181,6 +195,16 @@ if (command === 'deploy' && codeOnlyEnabled) {
     env: { ...env, OCI_FUNCTION_APP_ID: functionAppId },
   });
   if (result.status !== 0) process.exit(result.status ?? 1);
+  if (wantsFullStack && !hasFunctionApp) {
+    console.log('Creating API Gateway deployment for the code-only function...');
+    const apiGatewayDeploy = spawnSync('npm', ['run', '--silent', 'deploy', '--', ...passthroughArgs], {
+      stdio: 'inherit',
+      cwd: root,
+      shell: false,
+      env: { ...baseEnv, OCI_STACK_ACTION: 'full-stack' },
+    });
+    if (apiGatewayDeploy.status !== 0) process.exit(apiGatewayDeploy.status ?? 1);
+  }
   const logConfig = spawnSync('node', [path.join(root, 'bin', 'write-log-config.js')], {
     stdio: 'inherit',
     cwd: projectDir,

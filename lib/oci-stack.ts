@@ -13,6 +13,7 @@ import { ApigatewayGateway } from '../.gen/providers/oci/apigateway-gateway';
 import { ApigatewayDeployment } from '../.gen/providers/oci/apigateway-deployment';
 import { FunctionsApplication } from '../.gen/providers/oci/functions-application';
 import { FunctionsFunction } from '../.gen/providers/oci/functions-function';
+import { DataOciFunctionsFunctions } from '../.gen/providers/oci/data-oci-functions-functions';
 import { LoggingLogGroup } from '../.gen/providers/oci/logging-log-group';
 import { LoggingLog } from '../.gen/providers/oci/logging-log';
 import { IdentityPolicy } from '../.gen/providers/oci/identity-policy';
@@ -170,8 +171,9 @@ export class OciStack extends TerraformStack {
     // OCI_STACK_ACTION: "function-only" (or legacy "function") => no API Gateway; "full-stack" or unset => full stack including API Gateway.
     const stackActionRaw = (process.env.OCI_STACK_ACTION || '').trim().toLowerCase();
     const codeOnly = process.env.OCI_CODE_ONLY === '1' || process.env['code-only'] === '1';
-    // The preview archive function is created by OCI CLI, so its OCID is not available to CDKTF for API Gateway wiring.
-    const stackAction = codeOnly || stackActionRaw === 'function-only' || stackActionRaw === 'function' ? 'function-only' : 'full-stack';
+    // Code-only functions are created by OCI CLI. When the full stack is requested,
+    // their OCID is looked up by Terraform before wiring the API Gateway route.
+    const stackAction = stackActionRaw === 'function-only' || stackActionRaw === 'function' ? 'function-only' : 'full-stack';
 
     // OCIR Container Repository (root compartment allowed if explicitly set).
     const ocirCompartmentId = config.ocirCompartmentId || config.compartmentId;
@@ -472,9 +474,17 @@ tail-function-logs.js
         });
         ociFunction.addOverride('depends_on', [`null_resource.${buildAndPushImageId!}`]);
       }
-      if (stackAction === 'full-stack' && apiGateway && ociFunction) {
+      let functionIdForGateway: string | undefined = ociFunction?.id;
+      if (stackAction === 'full-stack' && apiGateway && codeOnly) {
+        const codeOnlyFunction = new DataOciFunctionsFunctions(this, 'CodeOnlyFunction', {
+          applicationId: functionApp.id,
+          displayName: config.functionName!,
+        });
+        functionIdForGateway = codeOnlyFunction.functions.get(0).id;
+      }
+      if (stackAction === 'full-stack' && apiGateway && functionIdForGateway) {
         const pathPrefix = config.apiGwPathPrefix ?? '/';
-        let routes: Array<{ path: string; methods: string[]; backend: { type: string; functionId: typeof ociFunction.id; readTimeoutInSeconds?: number } }>;
+        let routes: Array<{ path: string; methods: string[]; backend: { type: string; functionId: string; readTimeoutInSeconds?: number } }>;
         if (config.apiGwDeploymentJsonPath && fs.existsSync(config.apiGwDeploymentJsonPath)) {
           const raw = fs.readFileSync(config.apiGwDeploymentJsonPath, 'utf8');
           const spec = JSON.parse(raw) as { routes?: Array<{ path?: string; methods?: string[]; backend?: Record<string, unknown> }> };
@@ -483,8 +493,8 @@ tail-function-logs.js
             const b = r.backend ?? {};
             const functionIdRaw = (b.functionId ?? b.function_id) as string | undefined;
             const functionId = typeof functionIdRaw === 'string' && functionIdRaw.includes('${function_id}')
-              ? ociFunction.id
-              : (functionIdRaw ?? ociFunction.id);
+              ? functionIdForGateway
+              : (functionIdRaw ?? functionIdForGateway);
             const readTimeout = (b.readTimeoutInSeconds ?? b.read_timeout_in_seconds) as number | undefined;
             return {
               path: r.path ?? '/{path*}',
@@ -505,7 +515,7 @@ tail-function-logs.js
               methods,
               backend: {
                 type: 'ORACLE_FUNCTIONS_BACKEND',
-                functionId: ociFunction.id,
+                functionId: functionIdForGateway,
                 readTimeoutInSeconds: config.functionTimeoutSeconds ?? 30,
               },
             },
@@ -520,7 +530,7 @@ tail-function-logs.js
             routes,
           },
         });
-        apiDeployment.node.addDependency(ociFunction);
+        if (ociFunction) apiDeployment.node.addDependency(ociFunction);
       }
 
       // Functions execution log: SERVICE log for the Functions application (category invoke)

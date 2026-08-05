@@ -64,4 +64,4 @@ if (fs.existsSync(srcScript)) {
   console.warn('Source script not found:', srcScript);
 }
 
-console.log('Done. Run: node tail-function-logs.js  or  npx ocdk tail:execution-log');
+console.log('Done. Run: npx ocdk tail:execution-log');

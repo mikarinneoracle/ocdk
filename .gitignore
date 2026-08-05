@@ -19,6 +19,9 @@ node_modules/
 .env
 .env.local
 
+# Repository-local tool installations (for example OCI CLI preview)
+.tools/
+
 # IDE
 .vscode/
 .idea/

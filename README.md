@@ -38,6 +38,7 @@ Only **`OCI_COMPARTMENT_ID`** (or `OCI_COMPARTMENT_OCID`) is required for deploy
 | `OCI_TENANCY_ID` | Tenancy OCID | OCI CLI config |
 | `OCI_REGION` | Region (e.g. `eu-frankfurt-1`) | OCI CLI config |
 | `OCI_NAMESPACE` | Object Storage namespace | OCI CLI config or SDK |
+| `OCI_CLI_PATH` | OCI CLI executable to use for CLI-backed operations | `oci` from `PATH` |
 | `OCI_CREATE_APIGW_POLICY` | When `1`, also create the IAM policy so **API Gateway can invoke Functions** | `0` |
 | **OCIR** | | |
 | `OCI_OCIR_COMPARTMENT_ID` | Compartment for OCIR repo (non-root for full stack) | same as `OCI_COMPARTMENT_ID` |
@@ -54,6 +55,9 @@ Only **`OCI_COMPARTMENT_ID`** (or `OCI_COMPARTMENT_OCID`) is required for deploy
 | `OCI_FUNCTION_TIMEOUT_SECONDS` | Timeout in seconds | func.yaml |
 | `OCI_FUNCTION_CONFIG` | JSON object string for function config/env | — |
 | `OCI_IMAGE_TAG` | Image tag for OCIR | func.yaml version or `latest` |
+| `OCI_CODE_ONLY` | When `1`, use the Code-only Functions ZIP deploy path | `0` |
+| `OCI_CODE_ONLY_SOURCE_DIR` | Source directory to archive for code-only deploy | current directory |
+| `OCI_CODE_ONLY_RUNTIME_NAME` | Required OCI Functions runtime name for code-only deploy (for example `python312.ol9`) | — |
 | **API Gateway** | | |
 | `OCI_APIGATEWAY_DEPLOYMENT_JSON` | Path to deployment spec JSON | `oci_apigateway_deployment.json` in project root |
 | **Stack / networking** | | |
@@ -79,6 +83,40 @@ Only **`OCI_COMPARTMENT_ID`** (or `OCI_COMPARTMENT_OCID`) is required for deploy
 | `OCI_PROJECT_DIR` | Set by `ocdk` CLI to caller cwd | — |
 
 ## npx commands
+
+### Using an OCI CLI preview installation
+
+Choose a non-default CLI executable without changing your shell `PATH`:
+
+```bash
+export OCI_CLI_PATH="$PWD/.tools/oci-preview-bin/oci"
+```
+
+The repository-local preview installation is required only for preview-only features such as Code-only Functions. Regular deployments continue to use `oci` from `PATH` unless `OCI_CLI_PATH` is set.
+
+### Code-only Functions preview
+
+Code-only deployment first uses Terraform to create or manage the Function Application and its networking/logging resources. It then uploads a ZIP archive directly to OCI Functions with OCI CLI preview. OCI builds and manages the execution image: no Docker build, OCIR repository, or image push occurs.
+
+Activate the path with either `-code-only`, `--code-only`, or `OCI_CODE_ONLY=1`. The compatibility environment key `code-only=1` is also recognized when a process launcher can set a hyphenated environment name.
+
+```bash
+export OCI_CLI_PATH="$PWD/.tools/oci-preview-bin/oci"
+export OCI_COMPARTMENT_ID='ocid1.compartment.oc1...'
+export OCI_FUNCTION_APP_NAME='hello-arm'
+export OCI_FUNCTION_NAME='my-function'
+export OCI_CODE_ONLY_RUNTIME_NAME='python312.ol9'
+export OCI_FUNCTION_HANDLER='func.handler'
+npx ocdk deploy --code-only
+```
+
+The archive is built from `OCI_CODE_ONLY_SOURCE_DIR` (or the current directory). It includes source files and excludes `node_modules`, `.git`, `.tools`, `.terraform`, and `cdktf.out`. The current preview path is function-only: it does not create an API Gateway because the CLI-managed function OCID is not in Terraform state.
+
+Use the same flag or environment variable for deletion. OCDK deletes the CLI-managed function first, then lets Terraform destroy the Function App and its infrastructure:
+
+```bash
+npx ocdk destroy --code-only --auto-approve
+```
 
 Run from your project root (where your `func.yaml` / function code and `node_modules/@mikarinneoracle/oci-cdk` live):
 

@@ -1,12 +1,12 @@
-# Publish @mikarinneoracle/oci-cdk to npm using Trusted Publishing (OIDC).
-# Runs on every push to main and publishes the current package version.
+# Publish @mikarinneoracle/oci-cdk-code-only-preview to npm using Trusted Publishing (OIDC).
+# Runs on every push to code-only-preview and publishes the current package version.
 #
 # One-time npm setup (fixes 404 / "token expired" if not done):
-#   1. npmjs.com → your org @mikarinneoracle → Packages → create/link oci-cdk, set Access: Public
+#   1. npmjs.com → your org @mikarinneoracle → Packages → create/link oci-cdk-code-only-preview, set Access: Public
 #   2. Package page → Automation → Trusted publishers → Add GitHub Actions
 #      Repository: mikarinneoracle/ocdk
 #      Workflow file: .github/workflows/publish.yml
-#      Ref (branch): main
+#      Ref (branch): code-only-preview
 #   https://docs.npmjs.com/trusted-publishers
 
 name: Publish to npm
@@ -14,7 +14,7 @@ name: Publish to npm
 on:
   push:
     branches:
-      - main
+      - code-only-preview
 
 permissions:
   id-token: write

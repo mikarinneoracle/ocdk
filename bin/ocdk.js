@@ -12,6 +12,11 @@ const root = path.join(__dirname, '..');
 const args = process.argv.slice(2);
 const command = args[0];
 const projectDirFile = path.join(root, '.ocdk-project-dir');
+const codeOnlyEnabled =
+  process.env.OCI_CODE_ONLY === '1' ||
+  process.env['code-only'] === '1' ||
+  args.includes('-code-only') ||
+  args.includes('--code-only');
 
 const npmRunCommands = ['deploy', 'diff', 'synth', 'destroy', 'list', 'get'];
 
@@ -82,6 +87,70 @@ if (command === 'tail:execution-log') {
     env: process.env,
   });
   process.exit(result.status ?? 1);
+}
+
+// Code-only Functions use CDKTF for the Function Application/infrastructure,
+// then OCI CLI preview for the archive-function itself.
+if (command === 'deploy' && codeOnlyEnabled) {
+  const projectDir = process.cwd();
+  const script = path.join(root, 'bin', 'deploy-code-only.js');
+  const passthroughArgs = args.slice(1).filter((arg) => arg !== '-code-only' && arg !== '--code-only');
+  if (!fs.existsSync(script)) {
+    console.error('Missing script: "deploy-code-only". Update @mikarinneoracle/oci-cdk.');
+    process.exit(1);
+  }
+  const env = {
+    ...process.env,
+    OCI_CODE_ONLY: '1',
+    OCI_STACK_ACTION: 'function-only',
+    OCI_PROJECT_DIR: projectDir,
+  };
+  const infrastructure = spawnSync('npm', ['run', '--silent', 'deploy', '--', ...passthroughArgs], {
+    stdio: 'inherit',
+    cwd: root,
+    shell: false,
+    env,
+  });
+  if (infrastructure.status !== 0) process.exit(infrastructure.status ?? 1);
+  const result = spawnSync('node', [script], {
+    stdio: 'inherit',
+    cwd: projectDir,
+    shell: false,
+    env,
+  });
+  process.exit(result.status ?? 1);
+}
+
+// Destroy the CLI-managed archive function before Terraform destroys its
+// Function Application and supporting infrastructure.
+if (command === 'destroy' && codeOnlyEnabled) {
+  const projectDir = process.cwd();
+  const script = path.join(root, 'bin', 'destroy-code-only.js');
+  const passthroughArgs = args.slice(1).filter((arg) => arg !== '-code-only' && arg !== '--code-only');
+  if (!fs.existsSync(script)) {
+    console.error('Missing script: "destroy-code-only". Update @mikarinneoracle/oci-cdk.');
+    process.exit(1);
+  }
+  const env = {
+    ...process.env,
+    OCI_CODE_ONLY: '1',
+    OCI_STACK_ACTION: 'function-only',
+    OCI_PROJECT_DIR: projectDir,
+  };
+  const functionDestroy = spawnSync('node', [script], {
+    stdio: 'inherit',
+    cwd: projectDir,
+    shell: false,
+    env,
+  });
+  if (functionDestroy.status !== 0) process.exit(functionDestroy.status ?? 1);
+  const infrastructure = spawnSync('npm', ['run', '--silent', 'destroy', '--', ...passthroughArgs], {
+    stdio: 'inherit',
+    cwd: root,
+    shell: false,
+    env,
+  });
+  process.exit(infrastructure.status ?? 1);
 }
 
 // Use npm run <command> so we use project's cdktf without requiring global CLI

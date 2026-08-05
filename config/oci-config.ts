@@ -6,6 +6,7 @@
  * - OCI_TENANCY_ID
  * - OCI_REGION
  * - OCI_NAMESPACE (if unset, obtained via OCI SDK getNamespace)
+ * - OCI_CLI_PATH (OCI CLI executable; defaults to "oci")
  * - OCI_OCIR_COMPARTMENT_ID (for OCIR; must be non-root for full stack)
  * - OCI_FUNCTION_APP_NAME (Functions application name; default empty)
  * - OCI_FUNCTION_NAME (Function name; default empty)
@@ -372,7 +373,8 @@ const timeStart = start.toISOString();
 const timeEnd = now.toISOString();
 const scope = compId + '/' + logGroupId + '/' + executionLogId;
 const query = 'search "' + scope + '" | sort by datetime desc | limit 50';
-const r = spawnSync('oci', ['logging-search', 'search-logs', '--search-query', query, '--time-start', timeStart, '--time-end', timeEnd], { stdio: 'inherit' });
+const ociCliPath = process.env.OCI_CLI_PATH?.trim() || 'oci';
+const r = spawnSync(ociCliPath, ['logging-search', 'search-logs', '--search-query', query, '--time-start', timeStart, '--time-end', timeEnd], { stdio: 'inherit' });
 process.exit(r.status ?? 1);
 `;
 
@@ -489,8 +491,10 @@ function discoverFromFuncYamlAndTarget(): {
   const isNode = runtimeLower.startsWith('node');
   const jarPath = findJarInTarget(projectDir, nameFromYaml || undefined);
   const hasSource = hasPomAndSrc(projectDir);
+  const codeOnly = process.env.OCI_CODE_ONLY === '1' || process.env['code-only'] === '1';
   // Java: require JAR or Maven source layout. Python/Node: allow source-only projects (Dockerfile is generated).
-  if (!isPython && !isNode && !jarPath && !hasSource) return {};
+  // Code-only accepts any source directory that has a function name, because OCI builds the runtime image from its ZIP archive.
+  if (!codeOnly && !isPython && !isNode && !jarPath && !hasSource) return {};
 
   const functionName = process.env.OCI_FUNCTION_NAME?.trim() || nameFromYaml || path.basename(projectDir) || 'oci-function';
   const imageTag = process.env.OCI_IMAGE_TAG?.trim() || getFuncYamlVersion(projectDir);

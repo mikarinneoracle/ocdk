@@ -108,6 +108,7 @@ async function main() {
   const limit = 20;
   const intervalMs = parseInt(process.env.OCI_LOG_INTERVAL_MS || '5000', 10) || 5000;
   const debug = process.env.OCI_TAIL_DEBUG === '1' || process.env.OCI_TAIL_DEBUG === 'true';
+  const ociCliPath = process.env.OCI_CLI_PATH?.trim() || 'oci';
 
   function runOneSearch(timeStart, timeEnd) {
     const query = `search "${scope}" | sort by datetime desc | limit ${limit}`;
@@ -115,7 +116,7 @@ async function main() {
       console.error('[oci-tail]', timeStart, '->', timeEnd);
     }
     const res = spawnSync(
-      'oci',
+      ociCliPath,
       [
         'logging-search',
         'search-logs',
@@ -194,4 +195,3 @@ main().catch((err) => {
   console.error(err);
   process.exit(1);
 });
-

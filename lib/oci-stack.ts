@@ -169,12 +169,14 @@ export class OciStack extends TerraformStack {
 
     // OCI_STACK_ACTION: "function-only" (or legacy "function") => no API Gateway; "full-stack" or unset => full stack including API Gateway.
     const stackActionRaw = (process.env.OCI_STACK_ACTION || '').trim().toLowerCase();
-    const stackAction = stackActionRaw === 'function-only' || stackActionRaw === 'function' ? 'function-only' : 'full-stack';
+    const codeOnly = process.env.OCI_CODE_ONLY === '1' || process.env['code-only'] === '1';
+    // The preview archive function is created by OCI CLI, so its OCID is not available to CDKTF for API Gateway wiring.
+    const stackAction = codeOnly || stackActionRaw === 'function-only' || stackActionRaw === 'function' ? 'function-only' : 'full-stack';
 
     // OCIR Container Repository (root compartment allowed if explicitly set).
     const ocirCompartmentId = config.ocirCompartmentId || config.compartmentId;
     const ocirRepoName = config.ocirRepositoryName || config.functionName || 'oci-function';
-    const ocirRepository = new ArtifactsContainerRepository(this, 'OcirRepository', {
+    const ocirRepository = codeOnly ? undefined : new ArtifactsContainerRepository(this, 'OcirRepository', {
       compartmentId: ocirCompartmentId,
       displayName: ocirRepoName,
       isPublic: false,
@@ -182,29 +184,32 @@ export class OciStack extends TerraformStack {
     });
 
     const dockerContextPath = (config.dockerContextPath || config.functionJarPath)?.trim();
-    const createFullStack = config.functionName && dockerContextPath;
+    const createFullStack = config.functionName && (dockerContextPath || codeOnly);
 
     if (createFullStack) {
-      if (ocirCompartmentId.includes('root')) {
+      if (!codeOnly && ocirCompartmentId.includes('root')) {
         throw new Error(
           'Full stack (Function + API Gateway) requires a non-root compartment for OCIR. Set OCI_OCIR_COMPARTMENT_ID to your home compartment OCID.'
         );
       }
-      const functionCodePath = path.resolve(dockerContextPath!);
-      const imageTag = config.imageTag || 'latest';
-      const ocirRegistry = `${ocirHostKey(config.region)}.ocir.io`;
-      const imageUrl = getOciImageUrl(config);
       const appName = config.functionAppName || config.functionName!;
       const resourceName = appName;
 
       const privateSubnetIdFromEnv = (process.env.OCI_PRIVATE_SUBNET_ID || process.env.OCI_PRIVATE_SUBNET_OCID || process.env.OCI_FUNCTION_SUBNET_ID || '').trim();
       const publicSubnetIdFromEnv = (process.env.OCI_PUBLIC_SUBNET_ID || process.env.OCI_PUBLIC_SUBNET_OCID || process.env.OCI_APIGATEWAY_SUBNET_ID || '').trim();
 
+      let imageUrl: string | undefined;
+      let buildAndPushImageId: string | undefined;
+      if (!codeOnly) {
+      const functionCodePath = path.resolve(dockerContextPath!);
+      const imageTag = config.imageTag || 'latest';
+      const ocirRegistry = `${ocirHostKey(config.region)}.ocir.io`;
+      imageUrl = getOciImageUrl(config);
       this.addOverride('terraform.required_providers.null', {
         source: 'hashicorp/null',
         version: '~> 3.0',
       });
-      const buildAndPushImageId = 'BuildAndPushImage';
+      buildAndPushImageId = 'BuildAndPushImage';
       this.addOverride(`resource.null_resource.${buildAndPushImageId}.depends_on`, [
         'oci_artifacts_container_repository.OcirRepository',
       ]);
@@ -219,9 +224,11 @@ export class OciStack extends TerraformStack {
       const regionP = config.region;
       const namespaceP = config.namespace;
       const ocirUser = process.env.OCI_OCIR_USERNAME || 'AUTO_DETECT';
+      const ociCliPath = (process.env.OCI_CLI_PATH || 'oci').trim() || 'oci';
+      const ociCliCommand = `'${ociCliPath.replace(/'/g, "'\\''")}'`;
       const loginScript = process.env.OCI_AUTH_TOKEN
         ? `export OCIR_AUTH_TOKEN="${process.env.OCI_AUTH_TOKEN}"; OCIR_USER="${ocirUser}"; [ "$OCIR_USER" = "AUTO_DETECT" ] && OCIR_USER="${namespaceP}/user"; echo "$OCIR_AUTH_TOKEN" | docker login ${ocirRegistry} -u "$OCIR_USER" --password-stdin || exit 1`
-        : `oci raw-request --region ${regionP} --http-method GET --target-uri "https://${ocirRegistry}/20180419/docker/token" 2>/dev/null | (command -v jq >/dev/null && jq -r .data.token || grep -o '"token":"[^"]*"' | cut -d'"' -f4) | docker login -u BEARER_TOKEN --password-stdin ${ocirRegistry} || (echo "Set OCI_AUTH_TOKEN or configure OCI CLI" >&2; exit 1)`;
+        : `${ociCliCommand} raw-request --region ${regionP} --http-method GET --target-uri "https://${ocirRegistry}/20180419/docker/token" 2>/dev/null | (command -v jq >/dev/null && jq -r .data.token || grep -o '"token":"[^"]*"' | cut -d'"' -f4) | docker login -u BEARER_TOKEN --password-stdin ${ocirRegistry} || (echo "Set OCI_AUTH_TOKEN or configure OCI CLI" >&2; exit 1)`;
       const handler = config.handler || 'com.example.fn.HelloFunction::handleRequest';
       const runtime = config.runtime?.toLowerCase();
       let dockerfileContent = '';
@@ -325,6 +332,7 @@ tail-function-logs.js
         { 'local-exec': { command: `cd "${functionCodePath.replace(/"/g, '\\"')}" && docker build --platform linux/amd64 -t ${imageUrl} .` } },
         { 'local-exec': { command: `docker push ${imageUrl}` } },
       ]);
+      }
 
       let publicSubnet: CoreSubnet | undefined;
       let privateSubnet: CoreSubnet | undefined;
@@ -452,16 +460,19 @@ tail-function-logs.js
         displayName: appName,
         subnetIds: [functionAppSubnetId],
       });
-      const ociFunction = new FunctionsFunction(this, 'Function', {
-        applicationId: functionApp.id,
-        displayName: config.functionName!,
-        image: imageUrl,
-        memoryInMbs: config.functionMemoryMb ?? '256',
-        timeoutInSeconds: config.functionTimeoutSeconds ?? 30,
-        ...(config.functionConfig && Object.keys(config.functionConfig).length > 0 ? { config: config.functionConfig } : {}),
-      });
-      ociFunction.addOverride('depends_on', [`null_resource.${buildAndPushImageId}`]);
-      if (stackAction === 'full-stack' && apiGateway) {
+      let ociFunction: FunctionsFunction | undefined;
+      if (!codeOnly) {
+        ociFunction = new FunctionsFunction(this, 'Function', {
+          applicationId: functionApp.id,
+          displayName: config.functionName!,
+          image: imageUrl!,
+          memoryInMbs: config.functionMemoryMb ?? '256',
+          timeoutInSeconds: config.functionTimeoutSeconds ?? 30,
+          ...(config.functionConfig && Object.keys(config.functionConfig).length > 0 ? { config: config.functionConfig } : {}),
+        });
+        ociFunction.addOverride('depends_on', [`null_resource.${buildAndPushImageId!}`]);
+      }
+      if (stackAction === 'full-stack' && apiGateway && ociFunction) {
         const pathPrefix = config.apiGwPathPrefix ?? '/';
         let routes: Array<{ path: string; methods: string[]; backend: { type: string; functionId: typeof ociFunction.id; readTimeoutInSeconds?: number } }>;
         if (config.apiGwDeploymentJsonPath && fs.existsSync(config.apiGwDeploymentJsonPath)) {
@@ -532,12 +543,17 @@ tail-function-logs.js
 
       // tail-function-logs.js is written by: npx ocdk write-log-config (run after deploy).
 
-      new TerraformOutput(this, 'ocir_repository_name', { value: ocirRepository.displayName, description: 'OCIR repository name' });
+      if (ocirRepository) {
+        new TerraformOutput(this, 'ocir_repository_name', { value: ocirRepository.displayName, description: 'OCIR repository name' });
+      }
       if (apiGateway) {
         new TerraformOutput(this, 'api_gateway_host', { value: apiGateway.hostname, description: 'API Gateway hostname' });
         new TerraformOutput(this, 'function_invoke_url', { value: `https://${apiGateway.hostname}`, description: 'Base URL to invoke the function' });
       }
-      new TerraformOutput(this, 'function_id', { value: ociFunction.id, description: 'OCI Function OCID' });
+      new TerraformOutput(this, 'function_app_id', { value: functionApp.id, description: 'OCI Functions Application OCID' });
+      if (ociFunction) {
+        new TerraformOutput(this, 'function_id', { value: ociFunction.id, description: 'OCI Function OCID' });
+      }
       new TerraformOutput(this, 'log_group_id', { value: logGroup.id, description: 'OCI Log Group OCID for the application' });
       new TerraformOutput(this, 'execution_log_id', { value: executionLog.id, description: 'OCI Functions execution log OCID' });
     }

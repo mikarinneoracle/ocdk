@@ -24,8 +24,13 @@ function runOci(args) {
 }
 
 function jsonOci(args) {
+  const output = runOci([...args, '--output', 'json']).trim();
+  const objectStart = output.indexOf('{');
+  const arrayStart = output.indexOf('[');
+  const start = objectStart !== -1 ? objectStart : arrayStart;
+  const end = Math.max(output.lastIndexOf('}'), output.lastIndexOf(']'));
   try {
-    return JSON.parse(runOci([...args, '--output', 'json']));
+    return JSON.parse(start === -1 || end < start ? output : output.slice(start, end + 1));
   } catch (error) {
     fail(`OCI CLI returned invalid JSON for: ${args.join(' ')} (${error.message})`);
   }

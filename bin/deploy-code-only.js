@@ -67,12 +67,18 @@ function readFunctionMetadata() {
   return { functionName, appName, handler, runtimeName, memory, timeout };
 }
 
-function createArchive() {
+function codeOnlyArchiveFileName(functionName) {
+  const safeName = functionName.replace(/[^A-Za-z0-9._-]/g, '-');
+  return `${safeName || 'function'}.zip`;
+}
+
+function createArchive(functionName) {
   if (!fs.existsSync(projectDir) || !fs.statSync(projectDir).isDirectory()) {
     fail(`source directory does not exist: ${projectDir}`);
   }
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ocdk-code-only-'));
-  const archivePath = path.join(tempDir, 'function-source.zip');
+  const archiveFileName = codeOnlyArchiveFileName(functionName);
+  const archivePath = path.join(projectDir, archiveFileName);
   const archiveRoot = path.join(tempDir, 'function');
   const excludedTopLevel = new Set(['node_modules', '.git', '.tools', '.terraform', 'cdktf.out']);
   fs.cpSync(projectDir, archiveRoot, {
@@ -80,12 +86,15 @@ function createArchive() {
     filter: (sourcePath) => {
       const relativePath = path.relative(projectDir, sourcePath);
       if (!relativePath) return true;
+      if (relativePath === archiveFileName) return false;
       return !excludedTopLevel.has(relativePath.split(path.sep)[0]);
     },
   });
+  fs.rmSync(archivePath, { force: true });
   const zip = spawnSync('zip', ['-q', '-r', archivePath, 'function'], { cwd: tempDir, encoding: 'utf8', shell: false });
   if (zip.error || zip.status !== 0) {
     fs.rmSync(tempDir, { recursive: true, force: true });
+    fs.rmSync(archivePath, { force: true });
     fail(`could not create source archive with zip: ${zip.stderr?.trim() || zip.error?.message || 'unknown error'}`);
   }
   return { tempDir, archivePath };
@@ -133,7 +142,7 @@ function main() {
   const metadata = readFunctionMetadata();
   const applicationId = (process.env.OCI_FUNCTION_APP_ID || '').trim();
   if (!applicationId) fail('Terraform output OCI_FUNCTION_APP_ID is missing. Run through "ocdk deploy --code-only".');
-  const archive = createArchive();
+  const archive = createArchive(metadata.functionName);
   try {
     const functionId = findFunctionId(applicationId, metadata.functionName);
     const commonArgs = [

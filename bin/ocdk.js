@@ -57,6 +57,22 @@ function resolveCodeOnlyFunctionAppId(env) {
   }
 }
 
+function resolveCodeOnlyArchivePath(projectDir, env) {
+  let functionName = env.OCI_FUNCTION_NAME?.trim();
+  if (!functionName) {
+    try {
+      const funcYaml = fs.readFileSync(path.join(projectDir, 'func.yaml'), 'utf8');
+      const match = funcYaml.match(/^\s*name\s*:\s*(?:["']([^"']*)["']|([^#\r\n]*))/m);
+      functionName = (match?.[1] || match?.[2] || '').trim();
+    } catch {
+      return undefined;
+    }
+  }
+  if (!functionName) return undefined;
+  const safeName = functionName.replace(/[^A-Za-z0-9._-]/g, '-');
+  return path.join(projectDir, `${safeName || 'function'}.zip`);
+}
+
 const npmRunCommands = ['deploy', 'diff', 'synth', 'destroy', 'list', 'get'];
 
 if (!command || command.startsWith('-')) {
@@ -203,6 +219,13 @@ if (command === 'destroy' && codeOnlyEnabled) {
     shell: false,
     env,
   });
+  if (infrastructure.status === 0) {
+    const archivePath = resolveCodeOnlyArchivePath(projectDir, env);
+    if (archivePath && fs.existsSync(archivePath)) {
+      fs.rmSync(archivePath, { force: true });
+      console.log(`Removed code-only source archive: ${archivePath}`);
+    }
+  }
   process.exit(infrastructure.status ?? 1);
 }
 

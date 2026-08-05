@@ -1,6 +1,6 @@
 {
   "name": "@mikarinneoracle/oci-cdk-code-only-preview",
-  "version": "0.0.9",
+  "version": "0.0.10",
   "description": "OCI CDK stack for OCI Functions, API Gateway, and related infrastructure",
   "main": "lib/index.js",
   "bin": {

@@ -157,7 +157,10 @@ function main() {
     ];
     if (functionId) {
       console.log(`Updating code-only function ${metadata.functionName} in ${metadata.appName}...`);
-      runOci(['fn', 'function', 'update', 'archive-function', '--function-id', functionId, '--runtime-config', 'FUNCTION_UPDATE', '--force', ...commonArgs], { stdio: 'inherit' });
+      // OCI Preview CLI may print an unsuccessful waiter notice and the entire
+      // function payload even though the archive update was accepted. Keep its
+      // output captured so the normal deploy output remains concise.
+      runOci(['fn', 'function', 'update', 'archive-function', '--function-id', functionId, '--runtime-config', 'FUNCTION_UPDATE', '--force', ...commonArgs]);
       console.log(`Updated code-only function: ${functionId}`);
     } else {
       console.log(`Creating code-only function ${metadata.functionName} in ${metadata.appName}...`);
@@ -166,7 +169,7 @@ function main() {
         '--application-id', applicationId,
         '--display-name', metadata.functionName,
         ...commonArgs,
-      ], { stdio: 'inherit' });
+      ]);
       console.log('Created code-only function.');
     }
   } finally {

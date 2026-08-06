@@ -157,7 +157,7 @@ mvn -DskipTests package
 # or: gradle build -x test
 ```
 
-OCDK also runs this build automatically when no artifact exists yet, and searches the project root, Maven `target/`, and Gradle `build/libs/`. The build must produce a fat/uber JAR: Maven projects normally use `maven-shade-plugin`, and Gradle projects use the Shadow plugin. If several JARs exist, set `OCI_FUNCTION_JAR_PATH` to the fat JAR explicitly. Java archives do not contain the project source tree or a `function/` directory.
+OCDK also runs this build automatically when no artifact exists yet, and searches the project root, Maven `target/`, and Gradle `build/libs/`. The OCI service validates the JAR contents; if several non-source JARs exist, set `OCI_FUNCTION_JAR_PATH` to the one to deploy explicitly. Java archives do not contain the project source tree or a `function/` directory.
 
 #### Find the available code-only runtimes
 

@@ -123,21 +123,12 @@ function buildJavaProject() {
   }
 }
 
-function isFatJavaJar(jarPath) {
-  const result = spawnSync('jar', ['tf', jarPath], { encoding: 'utf8', shell: false });
-  if (result.error || result.status !== 0) return false;
-  return /(^|\n)com\/fnproject\/fn\/(api|runtime)\//.test(result.stdout || '');
-}
-
 function resolveJavaJar() {
   const configuredPath = (process.env.OCI_CODE_ONLY_JAR_PATH || process.env.OCI_FUNCTION_JAR_PATH || '').trim();
   if (configuredPath) {
     const jarPath = path.resolve(projectDir, configuredPath);
     if (!fs.existsSync(jarPath) || !fs.statSync(jarPath).isFile() || !jarPath.endsWith('.jar')) {
       fail(`OCI_FUNCTION_JAR_PATH must point to an existing .jar file: ${jarPath}`);
-    }
-    if (!isFatJavaJar(jarPath)) {
-      fail(`Java archive is not a fat/uber JAR: ${jarPath}. Configure your Maven Shade or Gradle Shadow build, then point OCI_FUNCTION_JAR_PATH to its output.`);
     }
     return jarPath;
   }
@@ -148,14 +139,11 @@ function resolveJavaJar() {
   }
   const uniqueCandidates = [...new Set(candidates)];
   if (uniqueCandidates.length === 1) {
-    if (!isFatJavaJar(uniqueCandidates[0])) {
-      fail(`Java build produced a non-fat JAR: ${uniqueCandidates[0]}. Configure your Maven Shade or Gradle Shadow build, then set OCI_FUNCTION_JAR_PATH to its fat/uber JAR.`);
-    }
     return uniqueCandidates[0];
   }
   const found = uniqueCandidates.length ? ` Found: ${uniqueCandidates.join(', ')}` : '';
-  const guidance = ' Run `mvn -DskipTests package` (or `gradle build -x test`) to produce a fat/uber JAR using Maven Shade or Gradle Shadow, then set OCI_FUNCTION_JAR_PATH (for example target/my-function-all.jar).';
-  fail(`Java code-only deploy requires exactly one fat/uber JAR.${guidance}${found}`);
+  const guidance = ' Run `mvn -DskipTests package` (or `gradle build -x test`) to produce the function JAR, then set OCI_FUNCTION_JAR_PATH (for example target/my-function.jar).';
+  fail(`Java code-only deploy requires exactly one JAR.${guidance}${found}`);
 }
 
 function createArchive(functionName, runtimeName) {

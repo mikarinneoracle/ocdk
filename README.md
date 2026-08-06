@@ -142,6 +142,16 @@ entrypoint: node func.js
 
 Keep `@fnproject/fdk` in `package.json` dependencies. The function source file uses `fdk.handle(...)`; it is not the OCI handler value.
 
+For Java, the code-only archive must contain exactly one fat/uber JAR at the ZIP root. Build it first and point OCDK to it when necessary:
+
+```bash
+export OCI_CODE_ONLY_RUNTIME_NAME='java21.ol9'
+export OCI_FUNCTION_HANDLER='com.example.fn.HelloFunction::handleRequest'
+export OCI_FUNCTION_JAR_PATH='target/my-function.jar'
+```
+
+If exactly one non-source JAR exists in the project root or `target/`, `OCI_FUNCTION_JAR_PATH` is optional. Java archives do not contain the project source tree or a `function/` directory.
+
 #### Find the available code-only runtimes
 
 The exact `OCI_CODE_ONLY_RUNTIME_NAME` values are enabled per tenancy and region during this Limited Availability preview. Query the Preview CLI instead of copying a runtime name from another environment:

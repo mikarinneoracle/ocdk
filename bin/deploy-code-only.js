@@ -94,6 +94,28 @@ function preparePackageManifest(archiveRoot) {
   }
 }
 
+function resolveJavaJar() {
+  const configuredPath = (process.env.OCI_CODE_ONLY_JAR_PATH || process.env.OCI_FUNCTION_JAR_PATH || '').trim();
+  if (configuredPath) {
+    const jarPath = path.resolve(projectDir, configuredPath);
+    if (!fs.existsSync(jarPath) || !fs.statSync(jarPath).isFile() || !jarPath.endsWith('.jar')) {
+      fail(`OCI_FUNCTION_JAR_PATH must point to an existing .jar file: ${jarPath}`);
+    }
+    return jarPath;
+  }
+  const candidates = [projectDir, path.join(projectDir, 'target')]
+    .flatMap((directory) => {
+      if (!fs.existsSync(directory)) return [];
+      return fs.readdirSync(directory)
+        .filter((name) => name.endsWith('.jar') && !name.endsWith('-sources.jar') && !name.endsWith('-javadoc.jar') && !name.startsWith('original-'))
+        .map((name) => path.join(directory, name));
+    });
+  const uniqueCandidates = [...new Set(candidates)];
+  if (uniqueCandidates.length === 1) return uniqueCandidates[0];
+  const found = uniqueCandidates.length ? ` Found: ${uniqueCandidates.join(', ')}` : '';
+  fail(`Java code-only deploy requires exactly one fat/uber JAR. Build the function first, or set OCI_FUNCTION_JAR_PATH to the JAR file.${found}`);
+}
+
 function createArchive(functionName, runtimeName) {
   if (!fs.existsSync(projectDir) || !fs.statSync(projectDir).isDirectory()) {
     fail(`source directory does not exist: ${projectDir}`);
@@ -101,8 +123,22 @@ function createArchive(functionName, runtimeName) {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ocdk-code-only-'));
   const archiveFileName = codeOnlyArchiveFileName(functionName);
   const archivePath = path.join(projectDir, archiveFileName);
-  const archiveRoot = path.join(tempDir, 'function');
+  const isJavaRuntime = runtimeName.toLowerCase().startsWith('java');
   const isNodeRuntime = runtimeName.toLowerCase().startsWith('node');
+  if (isJavaRuntime) {
+    const jarPath = resolveJavaJar();
+    const jarName = path.basename(jarPath);
+    fs.copyFileSync(jarPath, path.join(tempDir, jarName));
+    fs.rmSync(archivePath, { force: true });
+    const zip = spawnSync('zip', ['-q', '-r', archivePath, jarName], { cwd: tempDir, encoding: 'utf8', shell: false });
+    if (zip.error || zip.status !== 0) {
+      fs.rmSync(tempDir, { recursive: true, force: true });
+      fs.rmSync(archivePath, { force: true });
+      fail(`could not create Java archive with zip: ${zip.stderr?.trim() || zip.error?.message || 'unknown error'}`);
+    }
+    return { tempDir, archivePath };
+  }
+  const archiveRoot = path.join(tempDir, 'function');
   const excludedTopLevel = new Set(['node_modules', '.git', '.tools', '.terraform', 'cdktf.out', 'tail-function-logs.js', 'package-lock.json']);
   if (!isNodeRuntime) excludedTopLevel.add('package.json');
   fs.cpSync(projectDir, archiveRoot, {

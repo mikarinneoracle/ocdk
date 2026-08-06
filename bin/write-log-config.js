@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Write tail-function-logs.js to the project root with log IDs from terraform output.
+ * Write .ocdk/tail-function-logs.js with log IDs from terraform output.
  * Run from project root after deploy. Usage: npx ocdk write-log-config
  */
 const { spawnSync } = require('child_process');
@@ -54,12 +54,14 @@ if (!logGroupId || !executionLogId) {
 }
 
 const srcScript = path.join(packageRoot, 'scripts', 'tail-function-log.js');
-const destScript = path.join(projectRoot, 'tail-function-logs.js');
+const outputDir = path.join(projectRoot, '.ocdk');
+const destScript = path.join(outputDir, 'tail-function-logs.js');
 if (fs.existsSync(srcScript)) {
+  fs.mkdirSync(outputDir, { recursive: true });
   let content = fs.readFileSync(srcScript, 'utf8');
   content = content.replace(/__EXECUTION_LOG_ID__/g, executionLogId).replace(/__LOG_GROUP_ID__/g, logGroupId);
   fs.writeFileSync(destScript, content, 'utf8');
-  console.log('Wrote tail-function-logs.js');
+  console.log('Wrote .ocdk/tail-function-logs.js');
 } else {
   console.warn('Source script not found:', srcScript);
 }

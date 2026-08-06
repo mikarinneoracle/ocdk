@@ -1,5 +1,5 @@
 #!/bin/sh
-# Generate tail-function-logs.js in project root (IDs from terraform output). Run from Terraform local-exec.
+# Generate .ocdk/tail-function-logs.js (IDs from terraform output). Run from Terraform local-exec.
 # Terraform runs with cwd = package root (e.g. .../project/node_modules/.../oci-cdk), not inside cdktf.out/stacks.
 # So we must find project root by walking up to a dir named node_modules; its parent is the project root.
 PROJ_DIR="${OCI_PROJECT_DIR:-${PROJ_DIR}}"
@@ -33,10 +33,11 @@ else
   EXEC_LOG_ID="$(terraform output -raw execution_log_id 2>/dev/null || echo '')"
 fi
 if [ -z "$LOG_GROUP_ID" ] || [ -z "$EXEC_LOG_ID" ]; then exit 0; fi
-# Create tail-function-logs.js if missing (copy from package)
-if [ ! -f "$PROJ_DIR/tail-function-logs.js" ] && [ -f "$PROJ_DIR/node_modules/@mikarinneoracle/oci-cdk/scripts/tail-function-log.js" ]; then
-  cp "$PROJ_DIR/node_modules/@mikarinneoracle/oci-cdk/scripts/tail-function-log.js" "$PROJ_DIR/tail-function-logs.js"
+# Create the generated helper if missing (copy from package)
+mkdir -p "$PROJ_DIR/.ocdk"
+if [ ! -f "$PROJ_DIR/.ocdk/tail-function-logs.js" ] && [ -f "$PROJ_DIR/node_modules/@mikarinneoracle/oci-cdk/scripts/tail-function-log.js" ]; then
+  cp "$PROJ_DIR/node_modules/@mikarinneoracle/oci-cdk/scripts/tail-function-log.js" "$PROJ_DIR/.ocdk/tail-function-logs.js"
 fi
-if [ -f "$PROJ_DIR/tail-function-logs.js" ]; then
-  sed "s|__EXECUTION_LOG_ID__|$EXEC_LOG_ID|g;s|__LOG_GROUP_ID__|$LOG_GROUP_ID|g" "$PROJ_DIR/tail-function-logs.js" > "$PROJ_DIR/tail-function-logs.js.tmp" && mv "$PROJ_DIR/tail-function-logs.js.tmp" "$PROJ_DIR/tail-function-logs.js"
+if [ -f "$PROJ_DIR/.ocdk/tail-function-logs.js" ]; then
+  sed "s|__EXECUTION_LOG_ID__|$EXEC_LOG_ID|g;s|__LOG_GROUP_ID__|$LOG_GROUP_ID|g" "$PROJ_DIR/.ocdk/tail-function-logs.js" > "$PROJ_DIR/.ocdk/tail-function-logs.js.tmp" && mv "$PROJ_DIR/.ocdk/tail-function-logs.js.tmp" "$PROJ_DIR/.ocdk/tail-function-logs.js"
 fi

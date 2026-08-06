@@ -73,7 +73,7 @@ Only **`OCI_COMPARTMENT_ID`** (or `OCI_COMPARTMENT_OCID`) is required for deploy
 | `OCI_STATE_HTTP_UPDATE_METHOD` | Update method (for `http` backend) | `PUT` |
 | `OCI_STATE_HTTP_LOCK_ADDRESS` | Lock endpoint URL | — |
 | `OCI_STATE_HTTP_UNLOCK_ADDRESS` | Unlock endpoint URL | — |
-| **Log tail (tail-function-logs.js / tail:execution-log)** | | |
+| **Log tail (.ocdk/tail-function-logs.js / tail:execution-log)** | | |
 | `OCI_COMPARTMENT_ID` or `OCI_COMPARTMENT_OCID` | Required for tail | — |
 | `OCI_LOG_GROUP_ID` | Log group OCID | terraform output / `write-log-config` |
 | `OCI_EXECUTION_LOG_ID` | Execution log OCID | terraform output / `write-log-config` |
@@ -150,7 +150,14 @@ export OCI_FUNCTION_HANDLER='com.example.fn.HelloFunction::handleRequest'
 export OCI_FUNCTION_JAR_PATH='target/my-function.jar'
 ```
 
-If exactly one non-source JAR exists in the project root or `target/`, `OCI_FUNCTION_JAR_PATH` is optional. Java archives do not contain the project source tree or a `function/` directory.
+Before the first deploy, build the function JAR:
+
+```bash
+mvn -DskipTests package
+# or: gradle build -x test
+```
+
+OCDK also runs this build automatically when no artifact exists yet, and searches the project root, Maven `target/`, and Gradle `build/libs/`. The build must produce a fat/uber JAR: Maven projects normally use `maven-shade-plugin`, and Gradle projects use the Shadow plugin. If several JARs exist, set `OCI_FUNCTION_JAR_PATH` to the fat JAR explicitly. Java archives do not contain the project source tree or a `function/` directory.
 
 #### Find the available code-only runtimes
 
@@ -177,7 +184,7 @@ export OCI_FUNCTION_APP_NAME='my-existing-function-app'
 
 These settings are optional: `OCI_CODE_ONLY_SOURCE_DIR` (defaults to the current directory), `OCI_FUNCTION_MEMORY_MB` (from `func.yaml`, otherwise `256`), and `OCI_FUNCTION_TIMEOUT_SECONDS` (from `func.yaml`, otherwise `30`). `OCI_TENANCY_ID`, `OCI_REGION`, and `OCI_NAMESPACE` are also optional when they can be resolved from the active OCI CLI profile.
 
-Each deploy re-builds `<function-name>.zip` in the project root and uploads that file. The ZIP has the required `function/` directory at its root, includes source files, and excludes `node_modules`, `package-lock.json`, `.git`, `.tools`, `.terraform`, `cdktf.out`, and the generated `tail-function-logs.js`. For Node.js functions, a sanitized `package.json` remains so OCI can install the FDK and other dependencies; OCDK removes its own package dependency (`@mikarinneoracle/oci-cdk-code-only-preview`, and the legacy package name) from that copied manifest. For Python and Java code-only functions, `package.json` is excluded entirely. A successful code-only destroy removes this ZIP after Terraform has destroyed the Function App and infrastructure. With the default `OCI_STACK_ACTION=full-stack`, OCDK creates the API Gateway and uses a Terraform data source to resolve the CLI-managed function OCID for its route. The first code-only deploy therefore runs Terraform once to create the Function App, uploads the function, then runs Terraform again to create the Gateway deployment. Set `OCI_STACK_ACTION=function-only` to omit API Gateway.
+Each deploy re-builds `<function-name>.zip` in the project root and uploads that file. The ZIP has the required `function/` directory at its root, includes source files, and excludes `node_modules`, `package-lock.json`, `.git`, `.tools`, `.terraform`, `cdktf.out`, and the generated `.ocdk/` directory. For Node.js functions, a sanitized `package.json` remains so OCI can install the FDK and other dependencies; OCDK removes its own package dependency (`@mikarinneoracle/oci-cdk-code-only-preview`, and the legacy package name) from that copied manifest. For Python and Java code-only functions, `package.json` is excluded entirely. A successful code-only destroy removes this ZIP after Terraform has destroyed the Function App and infrastructure. With the default `OCI_STACK_ACTION=full-stack`, OCDK creates the API Gateway and uses a Terraform data source to resolve the CLI-managed function OCID for its route. The first code-only deploy therefore runs Terraform once to create the Function App, uploads the function, then runs Terraform again to create the Gateway deployment. Set `OCI_STACK_ACTION=function-only` to omit API Gateway.
 
 After a successful code-only deploy, OCDK writes the log IDs for `npx ocdk tail:execution-log` automatically.
 
@@ -196,7 +203,7 @@ npx ocdk destroy --auto-approve --code-only
 ```
 
 - **`npx ocdk deploy`** – Deploy the stack. Options (e.g. `--auto-approve`) are passed through.
-- **`npx ocdk tail:execution-log`** – Tail function execution logs. Resolves log IDs from terraform output or `OCI_LOG_GROUP_ID` / `OCI_EXECUTION_LOG_ID`. Set **`OCI_TAIL_DEBUG=1`** to print debug info to stderr if you get no output. Requires **`OCI_COMPARTMENT_ID`** (or `OCI_COMPARTMENT_OCID`) when run without a project `tail-function-logs.js`.
+- **`npx ocdk tail:execution-log`** – Tail function execution logs. Resolves log IDs from Terraform output or `OCI_LOG_GROUP_ID` / `OCI_EXECUTION_LOG_ID`. Its generated helper is stored under `.ocdk/` and ignored by Git. Set **`OCI_TAIL_DEBUG=1`** to print debug info to stderr if you get no output. Requires **`OCI_COMPARTMENT_ID`** (or `OCI_COMPARTMENT_OCID`) when run without generated log configuration.
 - **`npx ocdk destroy`** – Destroy the stack (Terraform destroy) using the same state/backend configuration as deploy. Options (e.g. `--auto-approve`) are passed through.
 
 ## Security notes

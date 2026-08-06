@@ -88,7 +88,7 @@ Commands (same as CDK):
   destroy     Destroy the stack
   list        List stacks
   get                Generate provider bindings (run from project root; use ocdk get, not cdktf get)
-  write-log-config   (Optional) Write tail-function-logs.js to project root with log IDs from terraform output
+  write-log-config   (Optional) Write .ocdk/tail-function-logs.js with log IDs from terraform output
   tail:execution-log Tail function execution logs (gets log IDs from terraform output or env)
 
 Examples:
@@ -100,7 +100,7 @@ Examples:
   process.exit(args[0] === '--help' || args[0] === '-h' ? 0 : 1);
 }
 
-// write-log-config – write tail-function-logs.js from terraform output (run from project root after deploy)
+// write-log-config – write .ocdk/tail-function-logs.js from terraform output (run from project root after deploy)
 if (command === 'write-log-config') {
   const projectDir = process.cwd();
   const script = path.join(root, 'bin', 'write-log-config.js');
@@ -117,10 +117,10 @@ if (command === 'write-log-config') {
   process.exit(result.status ?? 1);
 }
 
-// tail:execution-log – run project's tail-function-logs.js if present (in-code defaults from write-log-config), else package fallback
+// tail:execution-log – run project's generated log-tail script if present, else package fallback
 if (command === 'tail:execution-log') {
   const projectDir = process.cwd();
-  const projectScript = path.join(projectDir, 'tail-function-logs.js');
+  const projectScript = path.join(projectDir, '.ocdk', 'tail-function-logs.js');
   if (fs.existsSync(projectScript)) {
     // Refresh on every run. Older generated scripts can have empty defaults
     // instead of placeholders, so inspecting their content is not reliable.

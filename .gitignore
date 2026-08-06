@@ -11,6 +11,7 @@ lib/**/*.d.ts
 cdktf.out/
 cdktf.json.backup
 .ocdk-project-dir
+.ocdk/
 
 # Dependencies
 node_modules/

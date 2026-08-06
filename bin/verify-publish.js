@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * Verify built package and prepublish: README present, stack and config valid.
- * tail-function-logs.js is written by: npx ocdk write-log-config (after deploy).
+ * .ocdk/tail-function-logs.js is written by: npx ocdk write-log-config (after deploy).
  */
 const fs = require('fs');
 const path = require('path');
@@ -44,10 +44,10 @@ if (!fs.existsSync(stackPath)) {
   failed = true;
 }
 
-// 3. Config must create tail script in Node (ensureTailFunctionLogsScript)
+// 3. Config must create the generated tail script in .ocdk (ensureTailFunctionLogsScript)
 if (fs.existsSync(configPath)) {
   const config = fs.readFileSync(configPath, 'utf8');
-  if (!config.includes('ensureTailFunctionLogsScript') || !config.includes('tail-function-logs.js')) {
+  if (!config.includes('ensureTailFunctionLogsScript') || !config.includes("'.ocdk'") || !config.includes('tail-function-logs.js')) {
     console.error('[verify-publish] lib/config/oci-config.js missing ensureTailFunctionLogsScript. Copy config → lib/config and ensure latest config is used.');
     failed = true;
   }

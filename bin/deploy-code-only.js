@@ -94,6 +94,41 @@ function preparePackageManifest(archiveRoot) {
   }
 }
 
+function listJavaJarCandidates() {
+  return [projectDir, path.join(projectDir, 'target'), path.join(projectDir, 'build', 'libs')]
+    .flatMap((directory) => {
+      if (!fs.existsSync(directory)) return [];
+      return fs.readdirSync(directory)
+        .filter((name) => name.endsWith('.jar') && !name.endsWith('-sources.jar') && !name.endsWith('-javadoc.jar') && !name.endsWith('-plain.jar') && !name.startsWith('original-'))
+        .map((name) => path.join(directory, name));
+    });
+}
+
+function buildJavaProject() {
+  let command;
+  let args;
+  if (fs.existsSync(path.join(projectDir, 'pom.xml'))) {
+    command = fs.existsSync(path.join(projectDir, 'mvnw')) ? './mvnw' : 'mvn';
+    args = ['-q', '-DskipTests', 'package'];
+  } else if (fs.existsSync(path.join(projectDir, 'build.gradle')) || fs.existsSync(path.join(projectDir, 'build.gradle.kts'))) {
+    command = fs.existsSync(path.join(projectDir, 'gradlew')) ? './gradlew' : 'gradle';
+    args = ['build', '-x', 'test'];
+  } else {
+    return;
+  }
+  console.log(`Building Java function with ${command} ${args.join(' ')}...`);
+  const result = spawnSync(command, args, { cwd: projectDir, encoding: 'utf8', shell: false });
+  if (result.error || result.status !== 0) {
+    fail(`Java build failed: ${result.stderr?.trim() || result.stdout?.trim() || result.error?.message || 'unknown error'}`);
+  }
+}
+
+function isFatJavaJar(jarPath) {
+  const result = spawnSync('jar', ['tf', jarPath], { encoding: 'utf8', shell: false });
+  if (result.error || result.status !== 0) return false;
+  return /(^|\n)com\/fnproject\/fn\/(api|runtime)\//.test(result.stdout || '');
+}
+
 function resolveJavaJar() {
   const configuredPath = (process.env.OCI_CODE_ONLY_JAR_PATH || process.env.OCI_FUNCTION_JAR_PATH || '').trim();
   if (configuredPath) {
@@ -101,19 +136,26 @@ function resolveJavaJar() {
     if (!fs.existsSync(jarPath) || !fs.statSync(jarPath).isFile() || !jarPath.endsWith('.jar')) {
       fail(`OCI_FUNCTION_JAR_PATH must point to an existing .jar file: ${jarPath}`);
     }
+    if (!isFatJavaJar(jarPath)) {
+      fail(`Java archive is not a fat/uber JAR: ${jarPath}. Configure your Maven Shade or Gradle Shadow build, then point OCI_FUNCTION_JAR_PATH to its output.`);
+    }
     return jarPath;
   }
-  const candidates = [projectDir, path.join(projectDir, 'target')]
-    .flatMap((directory) => {
-      if (!fs.existsSync(directory)) return [];
-      return fs.readdirSync(directory)
-        .filter((name) => name.endsWith('.jar') && !name.endsWith('-sources.jar') && !name.endsWith('-javadoc.jar') && !name.startsWith('original-'))
-        .map((name) => path.join(directory, name));
-    });
+  let candidates = listJavaJarCandidates();
+  if (!candidates.length) {
+    buildJavaProject();
+    candidates = listJavaJarCandidates();
+  }
   const uniqueCandidates = [...new Set(candidates)];
-  if (uniqueCandidates.length === 1) return uniqueCandidates[0];
+  if (uniqueCandidates.length === 1) {
+    if (!isFatJavaJar(uniqueCandidates[0])) {
+      fail(`Java build produced a non-fat JAR: ${uniqueCandidates[0]}. Configure your Maven Shade or Gradle Shadow build, then set OCI_FUNCTION_JAR_PATH to its fat/uber JAR.`);
+    }
+    return uniqueCandidates[0];
+  }
   const found = uniqueCandidates.length ? ` Found: ${uniqueCandidates.join(', ')}` : '';
-  fail(`Java code-only deploy requires exactly one fat/uber JAR. Build the function first, or set OCI_FUNCTION_JAR_PATH to the JAR file.${found}`);
+  const guidance = ' Run `mvn -DskipTests package` (or `gradle build -x test`) to produce a fat/uber JAR using Maven Shade or Gradle Shadow, then set OCI_FUNCTION_JAR_PATH (for example target/my-function-all.jar).';
+  fail(`Java code-only deploy requires exactly one fat/uber JAR.${guidance}${found}`);
 }
 
 function createArchive(functionName, runtimeName) {
@@ -139,7 +181,7 @@ function createArchive(functionName, runtimeName) {
     return { tempDir, archivePath };
   }
   const archiveRoot = path.join(tempDir, 'function');
-  const excludedTopLevel = new Set(['node_modules', '.git', '.tools', '.terraform', 'cdktf.out', 'tail-function-logs.js', 'package-lock.json']);
+  const excludedTopLevel = new Set(['node_modules', '.git', '.tools', '.terraform', 'cdktf.out', '.ocdk', 'tail-function-logs.js', 'package-lock.json']);
   if (!isNodeRuntime) excludedTopLevel.add('package.json');
   fs.cpSync(projectDir, archiveRoot, {
     recursive: true,

@@ -132,9 +132,13 @@ export class OciStack extends TerraformStack {
   constructor(scope: Construct, id: string, config: OciStackConfig) {
     super(scope, id);
 
-    // Configure Terraform backend (if not local)
-    if (config.backend && config.backend.type !== 'local') {
-      if (config.backend.type === 'oci') {
+    // Keep local state in the caller's project, never under this npm package.
+    if (config.backend) {
+      if (config.backend.type === 'local') {
+        this.addOverride('terraform.backend', {
+          local: { path: config.backend.path },
+        });
+      } else if (config.backend.type === 'oci') {
         // OCI native backend
         this.addOverride('terraform.backend', {
           oci: {

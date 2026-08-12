@@ -19,6 +19,7 @@
  * - OCI_PROJECT_DIR (set by ocdk CLI to caller cwd; used to discover func.yaml and target/)
  * - OCI_STATE_BUCKET (for remote state)
  * - OCI_STATE_BACKEND_TYPE (oci|http|local)
+ * - OCI_STATE_LOCAL_PATH (local state path; default .ocdk/terraform.tfstate in the project directory)
  *
  * When OCI_PROJECT_DIR is set (e.g. running `npx ocdk deploy` from a Java project), config
  * discovers either target/*.jar or pom.xml+src/ (and optionally func.yaml name, version, cmd/handler).
@@ -34,6 +35,7 @@ import * as objectstorage from 'oci-objectstorage';
 
 export interface OciBackendConfig {
   type: 'oci' | 'http' | 'local';
+  path?: string;
   bucket?: string;
   key?: string;
   address?: string;
@@ -520,8 +522,17 @@ function discoverFromFuncYamlAndTarget(): {
 
 const backendType = (process.env.OCI_STATE_BACKEND_TYPE || 'local') as 'oci' | 'http' | 'local';
 
-const backendConfig: OciBackendConfig | undefined = backendType === 'local'
-  ? undefined
+const localStateProjectDir = path.resolve(process.env.OCI_PROJECT_DIR?.trim() || process.cwd());
+const configuredLocalStatePath = process.env.OCI_STATE_LOCAL_PATH?.trim();
+const localStatePath = configuredLocalStatePath
+  ? path.resolve(localStateProjectDir, configuredLocalStatePath)
+  : path.join(localStateProjectDir, '.ocdk', 'terraform.tfstate');
+
+const backendConfig: OciBackendConfig = backendType === 'local'
+  ? (() => {
+      fs.mkdirSync(path.dirname(localStatePath), { recursive: true });
+      return { type: 'local', path: localStatePath };
+    })()
   : backendType === 'oci'
     ? {
         type: 'oci',

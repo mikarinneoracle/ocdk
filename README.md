@@ -67,12 +67,15 @@ Only **`OCI_COMPARTMENT_ID`** (or `OCI_COMPARTMENT_OCID`) is required for deploy
 | `OCI_PUBLIC_SUBNET_ID`, `OCI_PUBLIC_SUBNET_OCID`, or `OCI_APIGATEWAY_SUBNET_ID` | Use existing public subnet for API Gateway | — |
 | **Terraform state** | | |
 | `OCI_STATE_BACKEND_TYPE` | Backend type | `local` |
+| `OCI_STATE_LOCAL_PATH` | Local state file path, relative to the project unless absolute | `.ocdk/terraform.tfstate` |
 | `OCI_STATE_BUCKET` | Bucket name (for `oci` backend) | — |
 | `OCI_STATE_KEY` | State file key (for `oci` backend) | — |
 | `OCI_STATE_HTTP_ADDRESS` | State URL (for `http` backend; e.g. PAR URL) | — |
 | `OCI_STATE_HTTP_UPDATE_METHOD` | Update method (for `http` backend) | `PUT` |
 | `OCI_STATE_HTTP_LOCK_ADDRESS` | Lock endpoint URL | — |
 | `OCI_STATE_HTTP_UNLOCK_ADDRESS` | Unlock endpoint URL | — |
+
+With the default local backend, OCDK stores Terraform state in your project at `.ocdk/terraform.tfstate` (which is gitignored), not under `node_modules`. Removing and reinstalling dependencies therefore preserves the state. Use an OCI or HTTP backend for shared or durable remote state.
 | **Log tail (.ocdk/tail-function-logs.js / tail:execution-log)** | | |
 | `OCI_COMPARTMENT_ID` or `OCI_COMPARTMENT_OCID` | Required for tail | — |
 | `OCI_LOG_GROUP_ID` | Log group OCID | terraform output / `write-log-config` |

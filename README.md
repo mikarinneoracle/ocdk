@@ -57,7 +57,7 @@ Only **`OCI_COMPARTMENT_ID`** (or `OCI_COMPARTMENT_OCID`) is required for deploy
 | `OCI_IMAGE_TAG` | Image tag for OCIR | func.yaml version or `latest` |
 | `OCI_CODE_ONLY` | When `1`, use the Code-only Functions ZIP deploy path | `0` |
 | `OCI_CODE_ONLY_SOURCE_DIR` | Source directory to archive for code-only deploy | current directory |
-| `OCI_CODE_ONLY_RUNTIME_NAME` | Required OCI Functions runtime name for code-only deploy (for example `python312.ol9`) | — |
+| `OCI_CODE_ONLY_RUNTIME_NAME` | Optional explicit OCI Functions runtime name for code-only deploy (for example `python312.ol9`). OCDK resolves Python automatically from `func.yaml`. | — |
 | **API Gateway** | | |
 | `OCI_APIGATEWAY_DEPLOYMENT_JSON` | Path to deployment spec JSON | `oci_apigateway_deployment.json` in project root |
 | **Stack / networking** | | |
@@ -115,8 +115,8 @@ export OCI_CLI_PATH="/Users/MRINNE/projects/ocdk/.tools/oci-preview-bin/oci"
 # Required: OCI target
 export OCI_COMPARTMENT_ID='ocid1.compartment.oc1...'
 
-# Required: code-only runtime and handler
-export OCI_CODE_ONLY_RUNTIME_NAME='python312.ol9'
+# Required: handler. OCDK resolves the latest available Python runtime.
+# Optionally pin one: export OCI_CODE_ONLY_RUNTIME_NAME='python312.ol9'
 export OCI_FUNCTION_HANDLER='func.handler'
 
 # Required in func.yaml: name: my-function
@@ -161,7 +161,7 @@ OCDK also runs this build automatically when no artifact exists yet, and searche
 
 #### Find the available code-only runtimes
 
-The exact `OCI_CODE_ONLY_RUNTIME_NAME` values are enabled per tenancy and region during this Limited Availability preview. Query the Preview CLI instead of copying a runtime name from another environment:
+The exact `OCI_CODE_ONLY_RUNTIME_NAME` values are enabled per tenancy and region during this Limited Availability preview. For Python, OCDK queries this list automatically and selects the newest matching runtime when `func.yaml` contains `runtime: python` (or a versioned value such as `python3.12`). Set `OCI_CODE_ONLY_RUNTIME_NAME` to pin or override that choice. Query the Preview CLI to inspect available runtimes or when deploying another language:
 
 ```bash
 # List every runtime available to the active OCI profile

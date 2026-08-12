@@ -49,12 +49,45 @@ function integerValue(value, name, fallback) {
   return String(parsed);
 }
 
+function runtimeResourceName(runtime) {
+  return runtime.name || runtime['runtime-name'] || runtime.runtimeName || runtime['runtimeName'] || '';
+}
+
+function pythonRuntimeSortKey(runtimeName) {
+  const match = runtimeName.toLowerCase().match(/^python(\d+)/);
+  return match ? Number.parseInt(match[1], 10) : -1;
+}
+
+function resolvePythonRuntime(runtime) {
+  // OCI's preview runtime names omit separators from the Python version:
+  // func.yaml's "python3.12" therefore maps to the runtime-list prefix
+  // "python312". A plain "python" selects the newest available version.
+  const normalizedRuntime = runtime.toLowerCase().replace(/[^a-z0-9]/g, '');
+  const namePrefix = normalizedRuntime === 'python' ? 'python' : normalizedRuntime;
+  const result = jsonOci(['fn', 'runtime', 'list', '--all', '--name-starts-with', namePrefix]);
+  const candidates = (result.data || [])
+    .map(runtimeResourceName)
+    .filter((name) => name.toLowerCase().startsWith(namePrefix));
+  if (!candidates.length) {
+    fail(`no available code-only runtime matches ${runtime}. Set OCI_CODE_ONLY_RUNTIME_NAME to a runtime returned by "oci fn runtime list --all".`);
+  }
+  candidates.sort((left, right) => {
+    const versionDifference = pythonRuntimeSortKey(right) - pythonRuntimeSortKey(left);
+    return versionDifference || right.localeCompare(left);
+  });
+  const selected = candidates[0];
+  console.log(`Selected OCI code-only runtime ${selected} for func.yaml runtime ${runtime}. Set OCI_CODE_ONLY_RUNTIME_NAME to pin a different runtime.`);
+  return selected;
+}
+
 function readFunctionMetadata() {
   const funcYamlPath = path.join(projectDir, 'func.yaml');
   const yaml = fs.existsSync(funcYamlPath) ? fs.readFileSync(funcYamlPath, 'utf8') : '';
   const functionName = (process.env.OCI_FUNCTION_NAME || yamlValue(yaml, 'name')).trim();
   const appName = (process.env.OCI_FUNCTION_APP_NAME || functionName).trim();
-  const runtimeName = (process.env.OCI_CODE_ONLY_RUNTIME_NAME || '').trim();
+  const configuredRuntime = yamlValue(yaml, 'runtime');
+  const runtimeName = (process.env.OCI_CODE_ONLY_RUNTIME_NAME || '').trim()
+    || (configuredRuntime.toLowerCase().startsWith('python') ? resolvePythonRuntime(configuredRuntime) : '');
   const configuredHandler = (process.env.OCI_FUNCTION_HANDLER || yamlValue(yaml, 'cmd') || yamlValue(yaml, 'entrypoint')).trim();
   // The managed Node runtime already invokes `node`; its handler is the script
   // path, whereas a conventional func.yaml entrypoint is `node func.js`.
@@ -66,7 +99,7 @@ function readFunctionMetadata() {
 
   if (!functionName) fail('set OCI_FUNCTION_NAME or add name: to func.yaml.');
   if (!appName) fail('set OCI_FUNCTION_APP_NAME.');
-  if (!runtimeName) fail('set OCI_CODE_ONLY_RUNTIME_NAME (for example python312.ol9).');
+  if (!runtimeName) fail('set OCI_CODE_ONLY_RUNTIME_NAME (for example python312.ol9). Automatic runtime resolution currently supports Python functions with runtime: python in func.yaml.');
   if (!handler) fail('set OCI_FUNCTION_HANDLER or add cmd: to func.yaml.');
 
   return { functionName, appName, handler, runtimeName, memory, timeout };

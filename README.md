@@ -105,6 +105,15 @@ The repository-local preview installation is required only for preview-only feat
 
 Code-only deployment first uses Terraform to create or manage the Function Application and its networking/logging resources. It then uploads a ZIP archive directly to OCI Functions with OCI CLI preview. OCI builds and manages the execution image: no Docker build, OCIR repository, or image push occurs.
 
+After the Function App exists, use the direct OCI CLI upload command to update only the code-only function and skip Terraform entirely:
+
+```bash
+export OCI_FUNCTION_APP_ID='ocid1.fnapp.oc1...'
+npx ocdk deploy-code-only
+```
+
+`deploy-code-only` requires `OCI_FUNCTION_APP_ID`; it does not create, look up, or change the Function App, API Gateway, networking, logging, or Terraform state.
+
 Activate the path with either `-code-only`, `--code-only`, or `OCI_CODE_ONLY=1`. The compatibility environment key `code-only=1` is also recognized when a process launcher can set a hyphenated environment name.
 
 ```bash

@@ -83,6 +83,7 @@ Usage: ocdk <command> [options]
 
 Commands (same as CDK):
   deploy      Deploy the stack
+  deploy-code-only  Upload/update an existing code-only Function App without Terraform
   diff        Compare stack with current state
   synth       Synthesize Terraform
   destroy     Destroy the stack
@@ -155,6 +156,32 @@ if (command === 'tail:execution-log') {
 
 // Code-only Functions use CDKTF for the Function Application/infrastructure,
 // then OCI CLI preview for the archive-function itself.
+if (command === 'deploy-code-only') {
+  const projectDir = process.cwd();
+  const script = path.join(root, 'bin', 'deploy-code-only.js');
+  const applicationId = process.env.OCI_FUNCTION_APP_ID?.trim();
+  if (!script || !fs.existsSync(script)) {
+    console.error('Missing script: "deploy-code-only". Update @mikarinneoracle/oci-cdk-code-only-preview.');
+    process.exit(1);
+  }
+  if (!applicationId) {
+    console.error('Code-only deploy failed: OCI_FUNCTION_APP_ID is required for "ocdk deploy-code-only". This command does not run Terraform to create or discover the Function App.');
+    process.exit(1);
+  }
+  const result = spawnSync('node', [script, ...args.slice(1)], {
+    stdio: 'inherit',
+    cwd: projectDir,
+    shell: false,
+    env: {
+      ...process.env,
+      OCI_CODE_ONLY: '1',
+      OCI_PROJECT_DIR: projectDir,
+      OCI_FUNCTION_APP_ID: applicationId,
+    },
+  });
+  process.exit(result.status ?? 1);
+}
+
 if (command === 'deploy' && codeOnlyEnabled) {
   const projectDir = process.cwd();
   const script = path.join(root, 'bin', 'deploy-code-only.js');

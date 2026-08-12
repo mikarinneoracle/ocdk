@@ -53,6 +53,13 @@ function runtimeResourceName(runtime) {
   return runtime.name || runtime['runtime-name'] || runtime.runtimeName || runtime['runtimeName'] || '';
 }
 
+function listItems(result) {
+  if (Array.isArray(result?.data)) return result.data;
+  if (Array.isArray(result?.data?.items)) return result.data.items;
+  if (Array.isArray(result?.items)) return result.items;
+  return [];
+}
+
 function pythonRuntimeSortKey(runtimeName) {
   const match = runtimeName.toLowerCase().match(/^python(\d+)/);
   return match ? Number.parseInt(match[1], 10) : -1;
@@ -65,7 +72,7 @@ function resolvePythonRuntime(runtime) {
   const normalizedRuntime = runtime.toLowerCase().replace(/[^a-z0-9]/g, '');
   const namePrefix = normalizedRuntime === 'python' ? 'python' : normalizedRuntime;
   const result = jsonOci(['fn', 'runtime', 'list', '--all', '--name-starts-with', namePrefix]);
-  const candidates = (result.data || [])
+  const candidates = listItems(result)
     .map(runtimeResourceName)
     .filter((name) => name.toLowerCase().startsWith(namePrefix));
   if (!candidates.length) {

@@ -127,16 +127,16 @@ export OCI_CLI_PATH="/Users/MRINNE/projects/ocdk/.tools/oci-preview-bin/oci"
 # Required: OCI target
 export OCI_COMPARTMENT_ID='ocid1.compartment.oc1...'
 
-# Required: handler. OCDK resolves the latest available Python runtime.
+# Optional explicit code-only handler. OCDK converts the standard Python
+# func.yaml entrypoint to func.handler automatically.
 # Optionally pin one: export OCI_CODE_ONLY_RUNTIME_NAME='python312.ol9'
-export OCI_FUNCTION_HANDLER='func.handler'
 
 # Required in func.yaml: name: my-function
 # Terraform creates the Function App; OCI CLI preview uploads the ZIP function
 npx ocdk deploy --auto-approve --code-only
 ```
 
-For a Node.js function, use the JavaScript file as the handler (not `fdk.handle` or `node func.js`):
+For a Node.js function, use the JavaScript file as the handler (not `fdk.handle` or `node func.js`). OCDK resolves the runtime from `build_image` or `run_image` when present:
 
 ```bash
 export OCI_CODE_ONLY_RUNTIME_NAME='node24.ol9'
@@ -154,7 +154,7 @@ entrypoint: node func.js
 
 Keep `@fnproject/fdk` in `package.json` dependencies. The function source file uses `fdk.handle(...)`; it is not the OCI handler value.
 
-For Java, the code-only archive must contain exactly one fat/uber JAR at the ZIP root. Build it first and point OCDK to it when necessary:
+For Java, the code-only archive must contain exactly one fat/uber JAR at the ZIP root. OCDK resolves the runtime from a `jdk`/`jre` version in `build_image` or `run_image` when present. Build it first and point OCDK to it when necessary:
 
 ```bash
 export OCI_CODE_ONLY_RUNTIME_NAME='java21.ol9'
@@ -173,7 +173,7 @@ OCDK also runs this build automatically when no artifact exists yet, and searche
 
 #### Find the available code-only runtimes
 
-The exact `OCI_CODE_ONLY_RUNTIME_NAME` values are enabled per tenancy and region during this Limited Availability preview. For Python, OCDK queries this list automatically. With `runtime: python`, it selects the version in `build_image` or `run_image` (for example `fnproject/python:3.12` selects `python312...`); without a versioned image, it selects the newest matching runtime. Set `OCI_CODE_ONLY_RUNTIME_NAME` to pin or override that choice. Query the Preview CLI to inspect available runtimes or when deploying another language:
+The exact `OCI_CODE_ONLY_RUNTIME_NAME` values are enabled per tenancy and region during this Limited Availability preview. For Python, Node.js, and Java, OCDK queries this list automatically. With a plain runtime name, it selects the version in `build_image` or `run_image` (for example `fnproject/python:3.12` selects `python312...`, and `jdk17` selects `java17...`); without a versioned image, it selects the newest matching runtime. Set `OCI_CODE_ONLY_RUNTIME_NAME` to pin or override that choice. Query the Preview CLI to inspect available runtimes or when deploying another language:
 
 ```bash
 # List every runtime available to the active OCI profile

@@ -60,28 +60,37 @@ function listItems(result) {
   return [];
 }
 
-function pythonRuntimeSortKey(runtimeName) {
-  const match = runtimeName.toLowerCase().match(/^python(\d+)/);
+function runtimeLanguage(runtime) {
+  const normalized = runtime.toLowerCase().replace(/[^a-z0-9]/g, '');
+  return ['python', 'node', 'java'].find((language) => normalized.startsWith(language));
+}
+
+function runtimeSortKey(runtimeName, language) {
+  const match = runtimeName.toLowerCase().match(new RegExp(`^${language}(\\d+)`));
   return match ? Number.parseInt(match[1], 10) : -1;
 }
 
-function pythonRuntimePrefix(runtime, yaml) {
-  // OCI's preview runtime names omit separators from the Python version:
-  // func.yaml's "python3.12" therefore maps to the runtime-list prefix
-  // "python312". For a plain "python", honor the version in Fn's
-  // build_image/run_image before falling back to the newest available version.
+function runtimePrefix(runtime, yaml) {
+  // OCI's preview runtime names omit separators from language versions, such
+  // as Python 3.12 -> python312. For a plain language name, honor the version
+  // in Fn's build_image/run_image before falling back to the newest runtime.
   const normalizedRuntime = runtime.toLowerCase().replace(/[^a-z0-9]/g, '');
-  if (normalizedRuntime !== 'python') return normalizedRuntime;
+  const language = runtimeLanguage(runtime);
+  if (!language || normalizedRuntime !== language) return normalizedRuntime;
   for (const key of ['build_image', 'run_image']) {
     const image = yamlValue(yaml, key);
-    const match = image.match(/(?:^|\/)python:(\d+)(?:\.(\d+))?(?:[-.]|$)/i);
-    if (match) return `python${match[1]}${match[2] || ''}`;
+    const versionMatch = language === 'java'
+      ? image.match(/(?:jdk|jre|java)[-:]?(\d+)/i)
+      : image.match(new RegExp(`(?:^|/)${language}:(\\d+)(?:\\.(\\d+))?(?:[-.]|$)`, 'i'));
+    if (versionMatch) return `${language}${versionMatch[1]}${versionMatch[2] || ''}`;
   }
-  return 'python';
+  return language;
 }
 
-function resolvePythonRuntime(runtime, yaml) {
-  const namePrefix = pythonRuntimePrefix(runtime, yaml);
+function resolveRuntime(runtime, yaml) {
+  const language = runtimeLanguage(runtime);
+  if (!language) return '';
+  const namePrefix = runtimePrefix(runtime, yaml);
   const result = jsonOci(['fn', 'runtime', 'list', '--all', '--name-starts-with', namePrefix]);
   const candidates = listItems(result)
     .map(runtimeResourceName)
@@ -90,12 +99,19 @@ function resolvePythonRuntime(runtime, yaml) {
     fail(`no available code-only runtime matches ${runtime}. Set OCI_CODE_ONLY_RUNTIME_NAME to a runtime returned by "oci fn runtime list --all".`);
   }
   candidates.sort((left, right) => {
-    const versionDifference = pythonRuntimeSortKey(right) - pythonRuntimeSortKey(left);
+    const versionDifference = runtimeSortKey(right, language) - runtimeSortKey(left, language);
     return versionDifference || right.localeCompare(left);
   });
   const selected = candidates[0];
   console.log(`Selected OCI code-only runtime ${selected} for func.yaml runtime ${runtime} (runtime prefix ${namePrefix}). Set OCI_CODE_ONLY_RUNTIME_NAME to pin a different runtime.`);
   return selected;
+}
+
+function codeOnlyPythonHandler(handler) {
+  // Fn's generated container entrypoint is not a code-only handler. Convert
+  // the standard form to the handler syntax required by the managed runtime.
+  const match = handler.match(/^\/python\/bin\/fdk\s+\/function\/(.+?)\.py\s+([A-Za-z_][A-Za-z0-9_]*)$/);
+  return match ? `${match[1].replace(/[\\/]/g, '.')}.${match[2]}` : handler;
 }
 
 function readFunctionMetadata() {
@@ -105,19 +121,21 @@ function readFunctionMetadata() {
   const appName = (process.env.OCI_FUNCTION_APP_NAME || functionName).trim();
   const configuredRuntime = yamlValue(yaml, 'runtime');
   const runtimeName = (process.env.OCI_CODE_ONLY_RUNTIME_NAME || '').trim()
-    || (configuredRuntime.toLowerCase().startsWith('python') ? resolvePythonRuntime(configuredRuntime, yaml) : '');
+    || resolveRuntime(configuredRuntime, yaml);
   const configuredHandler = (process.env.OCI_FUNCTION_HANDLER || yamlValue(yaml, 'cmd') || yamlValue(yaml, 'entrypoint')).trim();
   // The managed Node runtime already invokes `node`; its handler is the script
   // path, whereas a conventional func.yaml entrypoint is `node func.js`.
   const handler = runtimeName.toLowerCase().startsWith('node')
     ? configuredHandler.replace(/^node\s+/, '')
+    : runtimeName.toLowerCase().startsWith('python')
+      ? codeOnlyPythonHandler(configuredHandler)
     : configuredHandler;
   const memory = integerValue(process.env.OCI_FUNCTION_MEMORY_MB || yamlValue(yaml, 'memory'), 'OCI_FUNCTION_MEMORY_MB', 256);
   const timeout = integerValue(process.env.OCI_FUNCTION_TIMEOUT_SECONDS || yamlValue(yaml, 'timeout'), 'OCI_FUNCTION_TIMEOUT_SECONDS', 30);
 
   if (!functionName) fail('set OCI_FUNCTION_NAME or add name: to func.yaml.');
   if (!appName) fail('set OCI_FUNCTION_APP_NAME.');
-  if (!runtimeName) fail('set OCI_CODE_ONLY_RUNTIME_NAME (for example python312.ol9). Automatic runtime resolution currently supports Python functions with runtime: python in func.yaml.');
+  if (!runtimeName) fail('set OCI_CODE_ONLY_RUNTIME_NAME (for example python312.ol9). Automatic runtime resolution supports Python, Node.js, and Java func.yaml runtimes.');
   if (!handler) fail('set OCI_FUNCTION_HANDLER or add cmd: to func.yaml.');
 
   return { functionName, appName, handler, runtimeName, memory, timeout };

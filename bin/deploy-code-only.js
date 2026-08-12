@@ -208,7 +208,11 @@ function createArchive(functionName, runtimeName) {
     }
     return { tempDir, archivePath };
   }
-  const archiveRoot = path.join(tempDir, 'function');
+  // OCI extracts a source archive directly into /function. Do not add a
+  // "function/" wrapper directory here: a standard Fn Python entrypoint such
+  // as "/python/bin/fdk /function/func.py handler" must resolve func.py at
+  // the ZIP root after extraction.
+  const archiveRoot = tempDir;
   const excludedTopLevel = new Set(['node_modules', '.git', '.tools', '.terraform', 'cdktf.out', '.ocdk', 'tail-function-logs.js', 'package-lock.json']);
   if (!isNodeRuntime) excludedTopLevel.add('package.json');
   fs.cpSync(projectDir, archiveRoot, {
@@ -222,7 +226,7 @@ function createArchive(functionName, runtimeName) {
   });
   if (isNodeRuntime) preparePackageManifest(archiveRoot);
   fs.rmSync(archivePath, { force: true });
-  const zip = spawnSync('zip', ['-q', '-r', archivePath, 'function'], { cwd: tempDir, encoding: 'utf8', shell: false });
+  const zip = spawnSync('zip', ['-q', '-r', archivePath, '.'], { cwd: tempDir, encoding: 'utf8', shell: false });
   if (zip.error || zip.status !== 0) {
     fs.rmSync(tempDir, { recursive: true, force: true });
     fs.rmSync(archivePath, { force: true });

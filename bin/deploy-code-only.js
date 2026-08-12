@@ -98,9 +98,15 @@ function readFunctionMetadata() {
   const configuredHandler = (process.env.OCI_FUNCTION_HANDLER || yamlValue(yaml, 'cmd') || yamlValue(yaml, 'entrypoint')).trim();
   // The managed Node runtime already invokes `node`; its handler is the script
   // path, whereas a conventional func.yaml entrypoint is `node func.js`.
+  const isPythonRuntime = runtimeName.toLowerCase().startsWith('python');
   const handler = runtimeName.toLowerCase().startsWith('node')
     ? configuredHandler.replace(/^node\s+/, '')
-    : configuredHandler;
+    // Code-only archives must have a function/ directory at their ZIP root.
+    // OCI retains that directory beneath /function, so adapt Fn's standard
+    // Python entrypoint path to the archive layout.
+    : isPythonRuntime
+      ? configuredHandler.replace(/\/function\/(?!function\/)/g, '/function/function/')
+      : configuredHandler;
   const memory = integerValue(process.env.OCI_FUNCTION_MEMORY_MB || yamlValue(yaml, 'memory'), 'OCI_FUNCTION_MEMORY_MB', 256);
   const timeout = integerValue(process.env.OCI_FUNCTION_TIMEOUT_SECONDS || yamlValue(yaml, 'timeout'), 'OCI_FUNCTION_TIMEOUT_SECONDS', 30);
 
@@ -208,11 +214,9 @@ function createArchive(functionName, runtimeName) {
     }
     return { tempDir, archivePath };
   }
-  // OCI extracts a source archive directly into /function. Do not add a
-  // "function/" wrapper directory here: a standard Fn Python entrypoint such
-  // as "/python/bin/fdk /function/func.py handler" must resolve func.py at
-  // the ZIP root after extraction.
-  const archiveRoot = tempDir;
+  // OCI code-only source archives must contain a function/ directory at the
+  // ZIP root. Python handler paths are adapted in readFunctionMetadata().
+  const archiveRoot = path.join(tempDir, 'function');
   const excludedTopLevel = new Set(['node_modules', '.git', '.tools', '.terraform', 'cdktf.out', '.ocdk', 'tail-function-logs.js', 'package-lock.json']);
   if (!isNodeRuntime) excludedTopLevel.add('package.json');
   fs.cpSync(projectDir, archiveRoot, {
@@ -226,7 +230,7 @@ function createArchive(functionName, runtimeName) {
   });
   if (isNodeRuntime) preparePackageManifest(archiveRoot);
   fs.rmSync(archivePath, { force: true });
-  const zip = spawnSync('zip', ['-q', '-r', archivePath, '.'], { cwd: tempDir, encoding: 'utf8', shell: false });
+  const zip = spawnSync('zip', ['-q', '-r', archivePath, 'function'], { cwd: tempDir, encoding: 'utf8', shell: false });
   if (zip.error || zip.status !== 0) {
     fs.rmSync(tempDir, { recursive: true, force: true });
     fs.rmSync(archivePath, { force: true });

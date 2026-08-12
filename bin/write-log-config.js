@@ -33,6 +33,9 @@ try {
     cwd: packageRoot,
     encoding: 'utf8',
     shell: false,
+    // CDKTF executes in the installed package directory, but the local
+    // backend state belongs to the caller's project directory.
+    env: { ...process.env, OCI_PROJECT_DIR: projectRoot },
   });
   if (result.status !== 0 || !fs.existsSync(outputFile)) {
     throw new Error((result.stderr || result.stdout || '').trim() || 'cdktf output did not produce an output file.');

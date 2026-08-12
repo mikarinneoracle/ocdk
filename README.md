@@ -173,7 +173,7 @@ OCDK also runs this build automatically when no artifact exists yet, and searche
 
 #### Find the available code-only runtimes
 
-The exact `OCI_CODE_ONLY_RUNTIME_NAME` values are enabled per tenancy and region during this Limited Availability preview. For Python, OCDK queries this list automatically and selects the newest matching runtime when `func.yaml` contains `runtime: python` (or a versioned value such as `python3.12`). Set `OCI_CODE_ONLY_RUNTIME_NAME` to pin or override that choice. Query the Preview CLI to inspect available runtimes or when deploying another language:
+The exact `OCI_CODE_ONLY_RUNTIME_NAME` values are enabled per tenancy and region during this Limited Availability preview. For Python, OCDK queries this list automatically. With `runtime: python`, it selects the version in `build_image` or `run_image` (for example `fnproject/python:3.12` selects `python312...`); without a versioned image, it selects the newest matching runtime. Set `OCI_CODE_ONLY_RUNTIME_NAME` to pin or override that choice. Query the Preview CLI to inspect available runtimes or when deploying another language:
 
 ```bash
 # List every runtime available to the active OCI profile

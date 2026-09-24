@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Deploy an OCI Functions Code-only archive with OCI CLI preview.
+ * Deploy an OCI Functions Code-only archive with the OCI CLI.
  *
  * This is deliberately separate from the CDKTF image deploy flow: OCI builds
  * the execution image from the supplied archive, so Docker and OCIR are not
@@ -264,7 +264,7 @@ function createArchive(functionName, runtimeName) {
 
 function jsonOci(args) {
   const output = runOci([...args, '--output', 'json']).trim();
-  // Preview CLI can return an empty body for a successful list of no functions.
+  // OCI CLI can return an empty body for a successful list of no functions.
   if (!output) return { data: [] };
   const objectStart = output.indexOf('{');
   const arrayStart = output.indexOf('[');
@@ -288,11 +288,11 @@ function findFunctionId(applicationId, functionName) {
   return matches[0]?.id;
 }
 
-function verifyPreviewCli() {
+function verifyOciCli() {
   const version = runOci(['--version']).trim();
   const help = runOci(['fn', 'function', 'create', '--help']);
   if (!help.includes('archive-function')) {
-    fail(`OCI CLI ${version || 'at ' + ociCliPath} does not support archive-function. Set OCI_CLI_PATH to the OCI CLI preview binary.`);
+    fail(`OCI CLI ${version || 'at ' + ociCliPath} does not support archive-function. Install or select an OCI CLI version that supports Code-only Functions.`);
   }
   console.log(`Using OCI CLI ${version} at ${ociCliPath}`);
 }
@@ -300,7 +300,7 @@ function verifyPreviewCli() {
 function main() {
   const unexpectedArgs = process.argv.slice(2).filter((arg) => arg !== '--auto-approve');
   if (unexpectedArgs.length) fail(`unsupported code-only deploy option(s): ${unexpectedArgs.join(', ')}`);
-  verifyPreviewCli();
+  verifyOciCli();
   const metadata = readFunctionMetadata();
   const applicationId = (process.env.OCI_FUNCTION_APP_ID || '').trim();
   if (!applicationId) fail('Terraform output OCI_FUNCTION_APP_ID is missing. Run through "ocdk deploy --code-only".');
@@ -319,7 +319,7 @@ function main() {
     ];
     if (functionId) {
       console.log(`Updating code-only function ${metadata.functionName} in ${metadata.appName}...`);
-      // OCI Preview CLI may print an unsuccessful waiter notice and the entire
+      // OCI CLI may print an unsuccessful waiter notice and the entire
       // function payload even though the archive update was accepted. Keep its
       // output captured so the normal deploy output remains concise.
       runOci(['fn', 'function', 'update', 'archive-function', '--function-id', functionId, '--runtime-config', 'FUNCTION_UPDATE', '--force', ...commonArgs]);

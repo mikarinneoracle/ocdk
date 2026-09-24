@@ -25,7 +25,7 @@ function runOci(args) {
 
 function jsonOci(args) {
   const output = runOci([...args, '--output', 'json']).trim();
-  // Preview CLI can return an empty body for a successful list of no functions.
+  // OCI CLI can return an empty body for a successful list of no functions.
   if (!output) return { data: [] };
   const objectStart = output.indexOf('{');
   const arrayStart = output.indexOf('[');

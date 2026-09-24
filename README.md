@@ -87,26 +87,9 @@ With the default local backend, OCDK stores Terraform state in your project at `
 
 ## npx commands
 
-### Using an OCI CLI preview installation
+### Code-only Functions
 
-Choose a non-default CLI executable without changing your shell `PATH`. `OCI_CLI_PATH` must be the absolute path to the preview binary, not merely the directory containing it:
-
-```bash
-export OCI_CLI_PATH="/absolute/path/to/oci-preview-bin/oci"
-"$OCI_CLI_PATH" --version
-```
-
-For the repository-local preview installation used in this checkout:
-
-```bash
-export OCI_CLI_PATH="/Users/MRINNE/projects/ocdk/.tools/oci-preview-bin/oci"
-```
-
-The repository-local preview installation is required only for preview-only features such as Code-only Functions. Regular deployments continue to use `oci` from `PATH` unless `OCI_CLI_PATH` is set.
-
-### Code-only Functions preview
-
-Code-only deployment first uses Terraform to create or manage the Function Application and its networking/logging resources. It then uploads a ZIP archive directly to OCI Functions with OCI CLI preview. OCI builds and manages the execution image: no Docker build, OCIR repository, or image push occurs.
+Code-only deployment first uses Terraform to create or manage the Function Application and its networking/logging resources. It then uploads a ZIP archive directly to OCI Functions with the OCI CLI. OCI builds and manages the execution image: no Docker build, OCIR repository, or image push occurs.
 
 After the Function App exists, use the direct OCI CLI upload command to update only the code-only function and skip Terraform entirely:
 
@@ -120,10 +103,6 @@ npx ocdk deploy-code-only
 Activate the path with either `-code-only`, `--code-only`, or `OCI_CODE_ONLY=1`. The compatibility environment key `code-only=1` is also recognized when a process launcher can set a hyphenated environment name.
 
 ```bash
-# Required: OCI CLI preview binary
-export OCI_CLI_PATH="/Users/MRINNE/projects/ocdk/.tools/oci-preview-bin/oci"
-"$OCI_CLI_PATH" --version
-
 # Required: OCI target
 export OCI_COMPARTMENT_ID='ocid1.compartment.oc1...'
 
@@ -132,7 +111,7 @@ export OCI_COMPARTMENT_ID='ocid1.compartment.oc1...'
 # Optionally pin one: export OCI_CODE_ONLY_RUNTIME_NAME='python312.ol9'
 
 # Required in func.yaml: name: my-function
-# Terraform creates the Function App; OCI CLI preview uploads the ZIP function
+# Terraform creates the Function App; OCI CLI uploads the ZIP function
 npx ocdk deploy --auto-approve --code-only
 ```
 
@@ -173,16 +152,16 @@ OCDK also runs this build automatically when no artifact exists yet, and searche
 
 #### Find the available code-only runtimes
 
-The exact `OCI_CODE_ONLY_RUNTIME_NAME` values are enabled per tenancy and region during this Limited Availability preview. For Python, Node.js, and Java, OCDK queries this list automatically. With a plain runtime name, it selects the version in `build_image` or `run_image` (for example `fnproject/python:3.12` selects `python312...`, and `jdk17` selects `java17...`); without a versioned image, it selects the newest matching runtime. Set `OCI_CODE_ONLY_RUNTIME_NAME` to pin or override that choice. Query the Preview CLI to inspect available runtimes or when deploying another language:
+The exact `OCI_CODE_ONLY_RUNTIME_NAME` values can vary by tenancy and region. For Python, Node.js, and Java, OCDK queries this list automatically. With a plain runtime name, it selects the version in `build_image` or `run_image` (for example `fnproject/python:3.12` selects `python312...`, and `jdk17` selects `java17...`); without a versioned image, it selects the newest matching runtime. Set `OCI_CODE_ONLY_RUNTIME_NAME` to pin or override that choice. Query the OCI CLI to inspect available runtimes or when deploying another language:
 
 ```bash
 # List every runtime available to the active OCI profile
-"$OCI_CLI_PATH" fn runtime list --all --output table
+oci fn runtime list --all --output table
 
 # Narrow the list by runtime-name prefix, for example Python, Node.js, or Java
-"$OCI_CLI_PATH" fn runtime list --all --name-starts-with python --output table
-"$OCI_CLI_PATH" fn runtime list --all --name-starts-with node --output table
-"$OCI_CLI_PATH" fn runtime list --all --name-starts-with java --output table
+oci fn runtime list --all --name-starts-with python --output table
+oci fn runtime list --all --name-starts-with node --output table
+oci fn runtime list --all --name-starts-with java --output table
 ```
 
 OCI Functions supports Java, Python, Node.js, Go, Ruby, and C# FDKs in general; code-only availability is limited to the runtimes returned by the command above. See Oracle's [supported language versions](https://docs.oracle.com/en-us/iaas/Content/Functions/Tasks/languagessupportedbyfunctions.htm).

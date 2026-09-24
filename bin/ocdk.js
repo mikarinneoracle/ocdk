@@ -155,7 +155,7 @@ if (command === 'tail:execution-log') {
 }
 
 // Code-only Functions use CDKTF for the Function Application/infrastructure,
-// then OCI CLI preview for the archive-function itself.
+// then OCI CLI for the archive-function itself.
 if (command === 'deploy-code-only') {
   const projectDir = process.cwd();
   const script = path.join(root, 'bin', 'deploy-code-only.js');

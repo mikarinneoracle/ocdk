@@ -1,5 +1,5 @@
 # Publish @mikarinneoracle/oci-cdk to npm using Trusted Publishing (OIDC).
-# Runs build and tests on every pushed branch. Publishing remains restricted to main.
+# Runs build, tests, and version-triggered publishing on every pushed branch.
 #
 # One-time npm setup (fixes 404 / "token expired" if not done):
 #   1. npmjs.com → your org @mikarinneoracle → Packages → create/link oci-cdk, set Access: Public
@@ -65,10 +65,10 @@ jobs:
           echo "version_bumped=${bumped}" >> $GITHUB_OUTPUT
 
       - name: Verify npm for Trusted Publishing
-        if: github.ref == 'refs/heads/main' && steps.version_flag.outputs.version_bumped == 'true'
+        if: steps.version_flag.outputs.version_bumped == 'true'
         run: |
           npx -y npm@11.5.1 --version
 
       - name: Publish to npm
-        if: github.ref == 'refs/heads/main' && steps.version_flag.outputs.version_bumped == 'true'
+        if: steps.version_flag.outputs.version_bumped == 'true'
         run: npx -y npm@11.5.1 publish --provenance --access public

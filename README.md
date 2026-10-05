@@ -1,13 +1,13 @@
 # @mikarinneoracle/oci-cdk
 
-OCI Functions (Java, Python, Node.js), API Gateway, and related infrastructure via Terraform CDK. Run from your project root with `npx ocdk`.
+OCI Functions (Java, Python, Node.js), API Gateway, and related infrastructure via Terraform CDK. Code-only Functions are the default deployment type: Terraform creates, updates, and deletes the archive-backed Function directly. Run from your project root with `npx ocdk`.
 
 Quick example (Python function + API Gateway):
 
 ```bash
 mkdir my-python-function && cd my-python-function
 fn init --runtime python
-npm i --ignore-scripts @mikarinneoracle/oci-cdk
+npm i --loglevel=error --no-fund @mikarinneoracle/oci-cdk
 export OCI_COMPARTMENT_ID='ocid1.compartment.oc1...gq'
 
 # Deploy the function and API Gateway
@@ -23,7 +23,7 @@ npx ocdk tail:execution-log
 ## Required
 
 - **Node.js + npm** – `npx ocdk ...` runs via Node. Install a recent LTS (e.g. 20.x+), which includes npm.
-- **OCI CLI** – Configured (e.g. `oci setup config`). Used for auth, OCIR login, and `tail:execution-log`.
+- **OCI CLI** – Configured (e.g. `oci setup config`). Used for auth and `tail:execution-log`. Code-only deployment does not invoke the OCI CLI.
 - **Terraform** – Used under the hood by CDKTF for apply/destroy; must be on `PATH` when running `npx ocdk deploy` / `destroy`.
 - **Fn CLI (optional but handy)** – For creating boilerplate functions (`fn init --runtime java|python|node`) and bumping your function version/tag in `func.yaml` with `fn bump`.
 
@@ -38,6 +38,8 @@ Only **`OCI_COMPARTMENT_ID`** (or `OCI_COMPARTMENT_OCID`) is required for deploy
 | `OCI_TENANCY_ID` | Tenancy OCID | OCI CLI config |
 | `OCI_REGION` | Region (e.g. `eu-frankfurt-1`) | OCI CLI config |
 | `OCI_NAMESPACE` | Object Storage namespace | OCI CLI config or SDK |
+| `deployment-type` | Deployment type: `code-only` or `container-image` | `code-only` |
+| `OCI_DEPLOYMENT_TYPE` | Shell-friendly alias for `deployment-type` | — |
 | `OCI_CREATE_APIGW_POLICY` | When `1`, also create the IAM policy so **API Gateway can invoke Functions** | `0` |
 | **OCIR** | | |
 | `OCI_OCIR_COMPARTMENT_ID` | Compartment for OCIR repo (non-root for full stack) | same as `OCI_COMPARTMENT_ID` |
@@ -54,6 +56,7 @@ Only **`OCI_COMPARTMENT_ID`** (or `OCI_COMPARTMENT_OCID`) is required for deploy
 | `OCI_FUNCTION_TIMEOUT_SECONDS` | Timeout in seconds | func.yaml |
 | `OCI_FUNCTION_CONFIG` | JSON object string for function config/env | — |
 | `OCI_IMAGE_TAG` | Image tag for OCIR | func.yaml version or `latest` |
+| `OCI_CODE_ONLY_RUNTIME_NAME` | OCI managed runtime for code-only Functions (for example `python312.ol9`) | Derived from func.yaml, otherwise language default |
 | **API Gateway** | | |
 | `OCI_APIGATEWAY_DEPLOYMENT_JSON` | Path to deployment spec JSON | `oci_apigateway_deployment.json` in project root |
 | **Stack / networking** | | |
@@ -73,6 +76,19 @@ Only **`OCI_COMPARTMENT_ID`** (or `OCI_COMPARTMENT_OCID`) is required for deploy
 | **Log tail (tail-function-logs.js / tail:execution-log)** | | |
 
 With the default local backend, OCDK stores Terraform state in your project at `.ocdk/terraform.tfstate` (which is gitignored), not under `node_modules`. Removing and reinstalling dependencies therefore preserves the state. Use an OCI or HTTP backend for shared or durable remote state.
+
+## Deployment types
+
+`code-only` is the default. OCDK packages the Function as a ZIP/JAR and passes it to the native `oci_functions_function` Terraform resource with an `ARCHIVE` source. The direct-archive limit is 25 MiB. The Base64 archive is stored in Terraform state, so keep state local and ignored or use an appropriately protected remote backend.
+
+Use `container-image` only when the Function needs a custom image, operating-system packages, or other container-specific behavior:
+
+```bash
+export deployment-type=container-image
+npx ocdk deploy --auto-approve
+```
+
+For code-only Functions, set `OCI_CODE_ONLY_RUNTIME_NAME` to pin the tenancy/runtime-specific managed runtime when needed. OCI Functions does not install Python or Node.js application dependencies during archive deployment; package Python dependencies in the archive's `python/` directory. For Node.js, OCDK includes only the Function project's production dependency graph from `package.json`; it excludes `@mikarinneoracle/oci-cdk` and its Terraform/CDKTF tooling dependencies.
 
 | **Log tail (tail-function-logs.js / tail:execution-log)** | | |
 | `OCI_COMPARTMENT_ID` or `OCI_COMPARTMENT_OCID` | Required for tail | — |

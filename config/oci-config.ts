@@ -29,6 +29,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
+import { spawnSync } from 'child_process';
 import * as common from 'oci-common';
 import * as objectstorage from 'oci-objectstorage';
 
@@ -49,6 +50,8 @@ export interface OciConfig {
   tenancyId: string;
   region: string;
   namespace: string;
+  /** Code-only is the default; set deployment-type=container-image for Docker/OCIR. */
+  deploymentType: 'code-only' | 'container-image';
   /** When true, create IAM policy so API Gateway can invoke Functions. */
   createApigwPolicy?: boolean;
   functionAppName: string;
@@ -63,6 +66,10 @@ export interface OciConfig {
   imageTag?: string;
   /** Java FDK CMD handler (from func.yaml cmd/handler or OCI_FUNCTION_HANDLER; default below). */
   handler?: string;
+  /** Base64 ZIP/JAR sent directly to OCI by the Terraform provider. */
+  codeOnlyArchiveBase64?: string;
+  /** OCI managed runtime, for example python312.ol9. */
+  codeOnlyRuntimeName?: string;
   ocirRepositoryName?: string;
   /** Function memory in MB (128, 256, 512, 1024, 2048, 3072). From func.yaml memory or OCI_FUNCTION_MEMORY_MB. */
   functionMemoryMb?: string;
@@ -153,8 +160,8 @@ function getFuncYamlRuntime(projectDir: string): string | undefined {
 }
 
 /**
- * Try to read cmd/handler from func.yaml (OCI/Fn format).
- * Returns the value of "cmd:" or "handler:" line, trimmed; used as Docker CMD for Java FDK.
+ * Try to read cmd, handler, or entrypoint from func.yaml (OCI/Fn format).
+ * Returns the value of "cmd:", "handler:", or "entrypoint:" line, trimmed.
  */
 function getFuncYamlHandler(projectDir: string): string | undefined {
   const p = path.join(projectDir, 'func.yaml');
@@ -165,6 +172,8 @@ function getFuncYamlHandler(projectDir: string): string | undefined {
       if (cmdMatch) return cmdMatch[1].trim();
       const handlerMatch = content.match(/^\s*handler:\s*["']?([^"'\n]+)["']?/m);
       if (handlerMatch) return handlerMatch[1].trim();
+      const entrypointMatch = content.match(/^\s*entrypoint:\s*["']?([^"'\n]+)["']?/m);
+      if (entrypointMatch) return entrypointMatch[1].trim();
     }
   } catch {
     // ignore
@@ -514,6 +523,132 @@ function discoverFromFuncYamlAndTarget(): {
   };
 }
 
+function codeOnlyRuntimeName(runtime: string | undefined, yaml: string): string | undefined {
+  const configured = process.env.OCI_CODE_ONLY_RUNTIME_NAME?.trim();
+  if (configured) return configured;
+  const language = (runtime || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  if (!['python', 'node', 'java'].includes(language)) return undefined;
+  const image = ['build_image', 'run_image']
+    .map((key) => yaml.match(new RegExp(`^\\s*${key}\\s*:\\s*([^#\\r\\n]+)`, 'm'))?.[1]?.trim())
+    .find(Boolean) || '';
+  const version = language === 'java'
+    ? image.match(/(?:jdk|jre|java)[-:]?(\\d+)/i)?.[1]
+    : image.match(new RegExp(`${language}:(\\d+)(?:\\.(\\d+))?`, 'i'))?.slice(1).filter(Boolean).join('');
+  const fallback: Record<string, string> = { python: '312', node: '24', java: '17' };
+  return `${language}${version || fallback[language]}.ol9`;
+}
+
+function codeOnlyHandler(runtimeName: string, handler: string | undefined): string | undefined {
+  if (!handler) return undefined;
+  if (runtimeName.toLowerCase().startsWith('node')) return handler.replace(/^node\s+/, '');
+  if (runtimeName.toLowerCase().startsWith('python')) {
+    const match = handler.match(/^\/python\/bin\/fdk\s+\/function\/(.+?)\.py\s+([A-Za-z_][A-Za-z0-9_]*)$/);
+    return match ? `${match[1].replace(/[\\/]/g, '.')}.${match[2]}` : handler;
+  }
+  return handler;
+}
+
+const OCDK_PACKAGE_NAME = '@mikarinneoracle/oci-cdk';
+
+/** Locate the package Node would resolve when required from a package directory. */
+function resolveInstalledPackageDir(packageName: string, fromDir: string): string | undefined {
+  let currentDir = fromDir;
+  while (true) {
+    const candidate = path.join(currentDir, 'node_modules', ...packageName.split('/'));
+    if (fs.existsSync(path.join(candidate, 'package.json'))) return candidate;
+    const parent = path.dirname(currentDir);
+    if (parent === currentDir) return undefined;
+    currentDir = parent;
+  }
+}
+
+/**
+ * Copy the Function's production dependency graph without copying OCDK itself.
+ * A Function project commonly installs OCDK beside its runtime packages, so
+ * copying the whole node_modules tree would otherwise bundle CDKTF and its CLI.
+ */
+function copyNodeRuntimeDependencies(projectDir: string, destinationRoot: string): boolean {
+  const packageJsonPath = path.join(projectDir, 'package.json');
+  if (!fs.existsSync(packageJsonPath)) return false;
+  const rootManifest = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8')) as { dependencies?: Record<string, string> };
+  const rootDependencies = Object.keys(rootManifest.dependencies || {}).filter((name) => name !== OCDK_PACKAGE_NAME);
+  if (rootDependencies.length === 0) return false;
+
+  const copied = new Set<string>();
+  const copyPackage = (packageName: string, fromDir: string, required: boolean): void => {
+    const packageDir = resolveInstalledPackageDir(packageName, fromDir);
+    if (!packageDir) {
+      if (required) throw new Error(`Code-only Node.js deployment is missing production dependency "${packageName}". Run npm ci --omit=dev in the function project first.`);
+      return;
+    }
+    const resolvedDir = fs.realpathSync(packageDir);
+    if (copied.has(resolvedDir)) return;
+    copied.add(resolvedDir);
+
+    const relativePath = path.relative(projectDir, packageDir);
+    if (relativePath.startsWith('..') || path.isAbsolute(relativePath)) {
+      throw new Error(`Node.js dependency "${packageName}" resolves outside the function project and cannot be archived safely.`);
+    }
+    fs.cpSync(packageDir, path.join(destinationRoot, relativePath), { recursive: true });
+
+    const manifest = JSON.parse(fs.readFileSync(path.join(packageDir, 'package.json'), 'utf8')) as {
+      dependencies?: Record<string, string>;
+      optionalDependencies?: Record<string, string>;
+    };
+    for (const dependency of Object.keys(manifest.dependencies || {})) copyPackage(dependency, packageDir, true);
+    for (const dependency of Object.keys(manifest.optionalDependencies || {})) copyPackage(dependency, packageDir, false);
+  };
+
+  for (const dependency of rootDependencies) copyPackage(dependency, projectDir, true);
+  return true;
+}
+
+function createCodeOnlyArchive(projectDir: string, runtimeName: string, functionName: string): string {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ocdk-code-only-'));
+  const archivePath = path.join(tempDir, 'function.zip');
+  const isJava = runtimeName.toLowerCase().startsWith('java');
+  const isNode = runtimeName.toLowerCase().startsWith('node');
+  try {
+    if (isJava) {
+      const jarPath = process.env.OCI_FUNCTION_JAR_PATH?.trim()
+        ? path.resolve(projectDir, process.env.OCI_FUNCTION_JAR_PATH.trim())
+        : findJarInTarget(projectDir, functionName);
+      if (!jarPath || !fs.existsSync(jarPath)) {
+        throw new Error('Code-only Java deploy requires OCI_FUNCTION_JAR_PATH or one fat JAR in target/.');
+      }
+      const jarName = path.basename(jarPath);
+      fs.copyFileSync(jarPath, path.join(tempDir, jarName));
+      const result = spawnSync('zip', ['-q', '-r', archivePath, jarName], { cwd: tempDir, encoding: 'utf8' });
+      if (result.status !== 0 || result.error) throw new Error(`Could not create Java code-only archive: ${result.stderr || result.error?.message || 'zip failed'}`);
+    } else {
+      const archiveRoot = path.join(tempDir, 'function');
+      const excluded = new Set(['.git', '.ocdk', '.terraform', 'cdktf.out', 'node_modules', 'function.zip']);
+      fs.cpSync(projectDir, archiveRoot, {
+        recursive: true,
+        filter: (source) => {
+          const relative = path.relative(projectDir, source);
+          return !relative || !excluded.has(relative.split(path.sep)[0]);
+        },
+      });
+      // OCI does not install Node dependencies for code-only Functions. Copy only
+      // the Function's runtime dependency graph; never bundle OCDK or CDKTF.
+      if (isNode) {
+        copyNodeRuntimeDependencies(projectDir, tempDir);
+      }
+      const result = spawnSync('zip', ['-q', '-r', archivePath, 'function', ...(isNode && fs.existsSync(path.join(tempDir, 'node_modules')) ? ['node_modules'] : [])], { cwd: tempDir, encoding: 'utf8' });
+      if (result.status !== 0 || result.error) throw new Error(`Could not create code-only archive: ${result.stderr || result.error?.message || 'zip failed'}`);
+    }
+    const archive = fs.readFileSync(archivePath);
+    const maxDirectArchiveBytes = 25 * 1024 * 1024;
+    if (archive.length > maxDirectArchiveBytes) {
+      throw new Error(`Code-only direct archive is ${archive.length} bytes; the 25 MiB limit requires an Object Storage archive source.`);
+    }
+    return archive.toString('base64');
+  } finally {
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  }
+}
+
 const backendType = (process.env.OCI_STATE_BACKEND_TYPE || 'local') as 'oci' | 'http' | 'local';
 
 const localStateProjectDir = path.resolve(process.env.OCI_PROJECT_DIR?.trim() || process.cwd());
@@ -555,8 +690,13 @@ export async function getOciConfig(): Promise<OciConfig> {
   const tenancyId = process.env.OCI_TENANCY_ID?.trim() || cliConfig.tenancy?.trim() || 'ocid1.tenancy.oc1..aaaaaaa...';
   const region = process.env.OCI_REGION?.trim() || cliConfig.region?.trim() || 'eu-frankfurt-1';
   const createApigwPolicy = (process.env.OCI_CREATE_APIGW_POLICY || '').trim() === '1';
+  const deploymentTypeRaw = (process.env['deployment-type'] || process.env.OCI_DEPLOYMENT_TYPE || 'code-only').trim().toLowerCase();
+  if (deploymentTypeRaw !== 'code-only' && deploymentTypeRaw !== 'container-image') {
+    throw new Error('deployment-type must be either "code-only" or "container-image".');
+  }
+  const deploymentType = deploymentTypeRaw as 'code-only' | 'container-image';
 
-  if (!ocirCompartmentId || ocirCompartmentId.includes('root')) {
+  if (deploymentType === 'container-image' && (!ocirCompartmentId || ocirCompartmentId.includes('root'))) {
     console.warn('⚠️  WARNING: OCI_OCIR_COMPARTMENT_ID not set or set to root compartment.');
     console.warn('   Please set OCI_OCIR_COMPARTMENT_ID to your home compartment OCID.');
     console.warn('   Example: export OCI_OCIR_COMPARTMENT_ID="ocid1.compartment.oc1..aaaaaaa..."');
@@ -630,12 +770,33 @@ export async function getOciConfig(): Promise<OciConfig> {
     ensureTailFunctionLogsScript(dockerContextPath);
   }
 
+  let codeOnlyArchiveBase64: string | undefined;
+  let resolvedCodeOnlyRuntimeName: string | undefined;
+  let resolvedHandler = handler || undefined;
+  if (deploymentType === 'code-only') {
+    if (!dockerContextPath || !discovered.functionName) {
+      throw new Error('Code-only deployment requires a function project with func.yaml. Set deployment-type=container-image to use the Docker/OCIR workflow.');
+    }
+    const funcYamlPath = path.join(dockerContextPath, 'func.yaml');
+    const funcYaml = fs.existsSync(funcYamlPath) ? fs.readFileSync(funcYamlPath, 'utf8') : '';
+    resolvedCodeOnlyRuntimeName = codeOnlyRuntimeName(discovered.runtime, funcYaml);
+    if (!resolvedCodeOnlyRuntimeName) {
+      throw new Error('Set OCI_CODE_ONLY_RUNTIME_NAME to an OCI Functions managed runtime (for example python312.ol9).');
+    }
+    resolvedHandler = codeOnlyHandler(resolvedCodeOnlyRuntimeName, resolvedHandler);
+    if (!resolvedHandler) {
+      throw new Error('Code-only deployment requires OCI_FUNCTION_HANDLER or cmd/handler/entrypoint in func.yaml.');
+    }
+    codeOnlyArchiveBase64 = createCodeOnlyArchive(dockerContextPath, resolvedCodeOnlyRuntimeName, discovered.functionName);
+  }
+
   return {
     compartmentId,
     ocirCompartmentId: ocirCompartmentId || undefined,
     tenancyId,
     region,
     namespace,
+    deploymentType,
     createApigwPolicy: createApigwPolicy || undefined,
     functionAppName: process.env.OCI_FUNCTION_APP_NAME ?? discovered.functionAppName ?? '',
     functionName: process.env.OCI_FUNCTION_NAME ?? discovered.functionName ?? '',
@@ -643,7 +804,9 @@ export async function getOciConfig(): Promise<OciConfig> {
     dockerContextPath: dockerContextPath || undefined,
     runtime: discovered.runtime,
     imageTag,
-    handler: handler || undefined,
+    handler: resolvedHandler,
+    codeOnlyArchiveBase64,
+    codeOnlyRuntimeName: resolvedCodeOnlyRuntimeName,
     ocirRepositoryName: process.env.OCI_OCIR_REPOSITORY_NAME || undefined,
     functionMemoryMb: functionMemoryMb || undefined,
     functionTimeoutSeconds: functionTimeoutSeconds ?? undefined,

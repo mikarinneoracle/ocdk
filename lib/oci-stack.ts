@@ -124,6 +124,12 @@ export interface OciStackConfig {
   apiGwDeploymentJsonPath?: string;
   /** Runtime from func.yaml (e.g. 'java', 'python'); controls Dockerfile generation. */
   runtime?: string;
+  /** Code-only is the default; container-image retains the Docker/OCIR workflow. */
+  deploymentType: 'code-only' | 'container-image';
+  /** Base64 ZIP/JAR consumed by OCI's native archive Function API. */
+  codeOnlyArchiveBase64?: string;
+  /** OCI managed runtime name, for example python312.ol9. */
+  codeOnlyRuntimeName?: string;
   backend?: OciBackendConfig;
 }
 
@@ -174,11 +180,12 @@ export class OciStack extends TerraformStack {
     // OCI_STACK_ACTION: "function-only" (or legacy "function") => no API Gateway; "full-stack" or unset => full stack including API Gateway.
     const stackActionRaw = (process.env.OCI_STACK_ACTION || '').trim().toLowerCase();
     const stackAction = stackActionRaw === 'function-only' || stackActionRaw === 'function' ? 'function-only' : 'full-stack';
+    const isCodeOnly = config.deploymentType === 'code-only';
 
     // OCIR Container Repository (root compartment allowed if explicitly set).
     const ocirCompartmentId = config.ocirCompartmentId || config.compartmentId;
     const ocirRepoName = config.ocirRepositoryName || config.functionName || 'oci-function';
-    const ocirRepository = new ArtifactsContainerRepository(this, 'OcirRepository', {
+    const ocirRepository = isCodeOnly ? undefined : new ArtifactsContainerRepository(this, 'OcirRepository', {
       compartmentId: ocirCompartmentId,
       displayName: ocirRepoName,
       isPublic: false,
@@ -186,29 +193,32 @@ export class OciStack extends TerraformStack {
     });
 
     const dockerContextPath = (config.dockerContextPath || config.functionJarPath)?.trim();
-    const createFullStack = config.functionName && dockerContextPath;
+    const createFullStack = config.functionName && (isCodeOnly || dockerContextPath);
 
     if (createFullStack) {
-      if (ocirCompartmentId.includes('root')) {
+      if (!isCodeOnly && ocirCompartmentId.includes('root')) {
         throw new Error(
           'Full stack (Function + API Gateway) requires a non-root compartment for OCIR. Set OCI_OCIR_COMPARTMENT_ID to your home compartment OCID.'
         );
       }
+      const appName = config.functionAppName || config.functionName!;
+      const resourceName = appName;
+      const privateSubnetIdFromEnv = (process.env.OCI_PRIVATE_SUBNET_ID || process.env.OCI_PRIVATE_SUBNET_OCID || process.env.OCI_FUNCTION_SUBNET_ID || '').trim();
+      const publicSubnetIdFromEnv = (process.env.OCI_PUBLIC_SUBNET_ID || process.env.OCI_PUBLIC_SUBNET_OCID || process.env.OCI_APIGATEWAY_SUBNET_ID || '').trim();
+
+      let imageUrl: string | undefined;
+      let buildAndPushImageId: string | undefined;
+      if (!isCodeOnly) {
       const functionCodePath = path.resolve(dockerContextPath!);
       const imageTag = config.imageTag || 'latest';
       const ocirRegistry = `${ocirHostKey(config.region)}.ocir.io`;
-      const imageUrl = getOciImageUrl(config);
-      const appName = config.functionAppName || config.functionName!;
-      const resourceName = appName;
-
-      const privateSubnetIdFromEnv = (process.env.OCI_PRIVATE_SUBNET_ID || process.env.OCI_PRIVATE_SUBNET_OCID || process.env.OCI_FUNCTION_SUBNET_ID || '').trim();
-      const publicSubnetIdFromEnv = (process.env.OCI_PUBLIC_SUBNET_ID || process.env.OCI_PUBLIC_SUBNET_OCID || process.env.OCI_APIGATEWAY_SUBNET_ID || '').trim();
+      imageUrl = getOciImageUrl(config);
 
       this.addOverride('terraform.required_providers.null', {
         source: 'hashicorp/null',
         version: '~> 3.0',
       });
-      const buildAndPushImageId = 'BuildAndPushImage';
+      buildAndPushImageId = 'BuildAndPushImage';
       this.addOverride(`resource.null_resource.${buildAndPushImageId}.depends_on`, [
         'oci_artifacts_container_repository.OcirRepository',
       ]);
@@ -329,6 +339,7 @@ tail-function-logs.js
         { 'local-exec': { command: `cd "${functionCodePath.replace(/"/g, '\\"')}" && docker build --platform linux/amd64 -t ${imageUrl} .` } },
         { 'local-exec': { command: `docker push ${imageUrl}` } },
       ]);
+      }
 
       let publicSubnet: CoreSubnet | undefined;
       let privateSubnet: CoreSubnet | undefined;
@@ -459,12 +470,30 @@ tail-function-logs.js
       const ociFunction = new FunctionsFunction(this, 'Function', {
         applicationId: functionApp.id,
         displayName: config.functionName!,
-        image: imageUrl,
         memoryInMbs: config.functionMemoryMb ?? '256',
         timeoutInSeconds: config.functionTimeoutSeconds ?? 30,
+        ...(!isCodeOnly && imageUrl ? { image: imageUrl } : {}),
         ...(config.functionConfig && Object.keys(config.functionConfig).length > 0 ? { config: config.functionConfig } : {}),
       });
-      ociFunction.addOverride('depends_on', [`null_resource.${buildAndPushImageId}`]);
+      if (isCodeOnly) {
+        if (!config.codeOnlyArchiveBase64 || !config.codeOnlyRuntimeName || !config.handler) {
+          throw new Error('Code-only Function requires an archive, managed runtime name, and handler.');
+        }
+        ociFunction.addOverride('source_details', [{
+          source_type: 'ARCHIVE',
+          archive_source_details: [{
+            archive_source_type: 'DIRECT_ARCHIVE',
+            archive_file: config.codeOnlyArchiveBase64,
+          }],
+          handler: config.handler,
+          runtime_config: [{
+            functions_runtime_name: config.codeOnlyRuntimeName,
+            runtime_config_type: 'FUNCTION_UPDATE',
+          }],
+        }]);
+      } else {
+        ociFunction.addOverride('depends_on', [`null_resource.${buildAndPushImageId!}`]);
+      }
       if (stackAction === 'full-stack' && apiGateway) {
         const pathPrefix = config.apiGwPathPrefix ?? '/';
         let routes: Array<{ path: string; methods: string[]; backend: { type: string; functionId: typeof ociFunction.id; readTimeoutInSeconds?: number } }>;
@@ -536,7 +565,9 @@ tail-function-logs.js
 
       // tail-function-logs.js is written by: npx ocdk write-log-config (run after deploy).
 
-      new TerraformOutput(this, 'ocir_repository_name', { value: ocirRepository.displayName, description: 'OCIR repository name' });
+      if (ocirRepository) {
+        new TerraformOutput(this, 'ocir_repository_name', { value: ocirRepository.displayName, description: 'OCIR repository name' });
+      }
       if (apiGateway) {
         new TerraformOutput(this, 'api_gateway_host', { value: apiGateway.hostname, description: 'API Gateway hostname' });
         new TerraformOutput(this, 'function_invoke_url', { value: `https://${apiGateway.hostname}`, description: 'Base URL to invoke the function' });
@@ -549,8 +580,7 @@ tail-function-logs.js
     // Force oracle/oci (Terraform Registry) so terraform init uses it on OL8 and elsewhere; must run after provider is added
     this.addOverride('terraform.required_providers.oci', {
       source: 'oracle/oci',
-      // Pin to < 5.47.0: 5.47.0 crashes on darwin_arm64; 5.46.x and Linux (OL8) work
-      version: '>= 5.0.0, < 5.47.0',
+      version: '>= 9.3.0, < 10.0.0',
     });
   }
 }

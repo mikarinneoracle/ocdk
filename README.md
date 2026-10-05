@@ -1,6 +1,6 @@
 # @mikarinneoracle/oci-cdk
 
-OCI Functions (Java, Python, Node.js), API Gateway, and related infrastructure via Terraform CDK. Code-only Functions are the default deployment type: Terraform creates, updates, and deletes the archive-backed Function directly. Run from your project root with `npx ocdk`.
+OCI Functions (Java, Python, Node.js), API Gateway, and related infrastructure via Terraform CDK. **From 2.0 onward, code-only is the default deployment type:** Terraform creates, updates, and deletes the archive-backed Function directly. Use `OCI_DEPLOYMENT_TYPE=container-image` only when you explicitly need the legacy Docker/OCIR workflow. Run from your project root with `npx ocdk`.
 
 Quick example (Python function + API Gateway):
 
@@ -9,6 +9,7 @@ mkdir my-python-function && cd my-python-function
 fn init --runtime python
 npm i --loglevel=error --no-fund @mikarinneoracle/oci-cdk
 export OCI_COMPARTMENT_ID='ocid1.compartment.oc1...gq'
+export OCI_FUNCTION_HANDLER='func.handler'
 
 # Deploy the function and API Gateway
 npx ocdk deploy --auto-approve
@@ -56,7 +57,7 @@ Only **`OCI_COMPARTMENT_ID`** (or `OCI_COMPARTMENT_OCID`) is required for deploy
 | `OCI_FUNCTION_TIMEOUT_SECONDS` | Timeout in seconds | func.yaml |
 | `OCI_FUNCTION_CONFIG` | JSON object string for function config/env | — |
 | `OCI_IMAGE_TAG` | Image tag for OCIR | func.yaml version or `latest` |
-| `OCI_CODE_ONLY_RUNTIME_NAME` | OCI managed runtime for code-only Functions (for example `python312.ol9`) | Derived from func.yaml, otherwise language default |
+| `OCI_CODE_ONLY_RUNTIME_NAME` | OCI managed runtime for code-only Functions (for example `python312.ol9`; use `java21.ol9` for Java code-only) | Derived from func.yaml, otherwise language default |
 | **API Gateway** | | |
 | `OCI_APIGATEWAY_DEPLOYMENT_JSON` | Path to deployment spec JSON | `oci_apigateway_deployment.json` in project root |
 | **Stack / networking** | | |
@@ -79,16 +80,16 @@ With the default local backend, OCDK stores Terraform state in your project at `
 
 ## Deployment types
 
-`code-only` is the default. OCDK packages the Function as a ZIP/JAR and passes it to the native `oci_functions_function` Terraform resource with an `ARCHIVE` source. The direct-archive limit is 25 MiB. The Base64 archive is stored in Terraform state, so keep state local and ignored or use an appropriately protected remote backend.
+`code-only` is the default from version 2.0 onward. OCDK packages the Function as a ZIP/JAR and passes it to the native `oci_functions_function` Terraform resource with an `ARCHIVE` source. The direct-archive limit is 25 MiB. The Base64 archive is stored in Terraform state, so keep state local and ignored or use an appropriately protected remote backend.
 
 Use `container-image` only when the Function needs a custom image, operating-system packages, or other container-specific behavior:
 
 ```bash
-export deployment-type=container-image
+export OCI_DEPLOYMENT_TYPE=container-image
 npx ocdk deploy --auto-approve
 ```
 
-For code-only Functions, set `OCI_CODE_ONLY_RUNTIME_NAME` to pin the tenancy/runtime-specific managed runtime when needed. OCI Functions does not install Python or Node.js application dependencies during archive deployment; package Python dependencies in the archive's `python/` directory. For Node.js, OCDK includes only the Function project's production dependency graph from `package.json`; it excludes `@mikarinneoracle/oci-cdk` and its Terraform/CDKTF tooling dependencies.
+For code-only Functions, set `OCI_CODE_ONLY_RUNTIME_NAME` to pin the tenancy/runtime-specific managed runtime when needed. For Java code-only Functions, set `OCI_CODE_ONLY_RUNTIME_NAME=java21.ol9` explicitly. OCI Functions does not install Python or Node.js application dependencies during archive deployment; package Python dependencies in the archive's `python/` directory. For Node.js, OCDK includes only the Function project's production dependency graph from `package.json`; it excludes `@mikarinneoracle/oci-cdk` and its Terraform/CDKTF tooling dependencies.
 
 | **Log tail (tail-function-logs.js / tail:execution-log)** | | |
 | `OCI_COMPARTMENT_ID` or `OCI_COMPARTMENT_OCID` | Required for tail | — |

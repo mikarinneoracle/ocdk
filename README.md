@@ -88,7 +88,7 @@ export deployment-type=container-image
 npx ocdk deploy --auto-approve
 ```
 
-For code-only Functions, set `OCI_CODE_ONLY_RUNTIME_NAME` to pin the tenancy/runtime-specific managed runtime when needed. OCI Functions does not install Python or Node.js application dependencies during archive deployment; package Python dependencies in the archive's `python/` directory and Node dependencies in `node_modules/`.
+For code-only Functions, set `OCI_CODE_ONLY_RUNTIME_NAME` to pin the tenancy/runtime-specific managed runtime when needed. OCI Functions does not install Python or Node.js application dependencies during archive deployment; package Python dependencies in the archive's `python/` directory. For Node.js, OCDK includes only the Function project's production dependency graph from `package.json`; it excludes `@mikarinneoracle/oci-cdk` and its Terraform/CDKTF tooling dependencies.
 
 | **Log tail (tail-function-logs.js / tail:execution-log)** | | |
 | `OCI_COMPARTMENT_ID` or `OCI_COMPARTMENT_OCID` | Required for tail | — |

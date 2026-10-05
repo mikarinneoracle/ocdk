@@ -548,6 +548,61 @@ function codeOnlyHandler(runtimeName: string, handler: string | undefined): stri
   return handler;
 }
 
+const OCDK_PACKAGE_NAME = '@mikarinneoracle/oci-cdk';
+
+/** Locate the package Node would resolve when required from a package directory. */
+function resolveInstalledPackageDir(packageName: string, fromDir: string): string | undefined {
+  let currentDir = fromDir;
+  while (true) {
+    const candidate = path.join(currentDir, 'node_modules', ...packageName.split('/'));
+    if (fs.existsSync(path.join(candidate, 'package.json'))) return candidate;
+    const parent = path.dirname(currentDir);
+    if (parent === currentDir) return undefined;
+    currentDir = parent;
+  }
+}
+
+/**
+ * Copy the Function's production dependency graph without copying OCDK itself.
+ * A Function project commonly installs OCDK beside its runtime packages, so
+ * copying the whole node_modules tree would otherwise bundle CDKTF and its CLI.
+ */
+function copyNodeRuntimeDependencies(projectDir: string, destinationRoot: string): boolean {
+  const packageJsonPath = path.join(projectDir, 'package.json');
+  if (!fs.existsSync(packageJsonPath)) return false;
+  const rootManifest = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8')) as { dependencies?: Record<string, string> };
+  const rootDependencies = Object.keys(rootManifest.dependencies || {}).filter((name) => name !== OCDK_PACKAGE_NAME);
+  if (rootDependencies.length === 0) return false;
+
+  const copied = new Set<string>();
+  const copyPackage = (packageName: string, fromDir: string, required: boolean): void => {
+    const packageDir = resolveInstalledPackageDir(packageName, fromDir);
+    if (!packageDir) {
+      if (required) throw new Error(`Code-only Node.js deployment is missing production dependency "${packageName}". Run npm ci --omit=dev in the function project first.`);
+      return;
+    }
+    const resolvedDir = fs.realpathSync(packageDir);
+    if (copied.has(resolvedDir)) return;
+    copied.add(resolvedDir);
+
+    const relativePath = path.relative(projectDir, packageDir);
+    if (relativePath.startsWith('..') || path.isAbsolute(relativePath)) {
+      throw new Error(`Node.js dependency "${packageName}" resolves outside the function project and cannot be archived safely.`);
+    }
+    fs.cpSync(packageDir, path.join(destinationRoot, relativePath), { recursive: true });
+
+    const manifest = JSON.parse(fs.readFileSync(path.join(packageDir, 'package.json'), 'utf8')) as {
+      dependencies?: Record<string, string>;
+      optionalDependencies?: Record<string, string>;
+    };
+    for (const dependency of Object.keys(manifest.dependencies || {})) copyPackage(dependency, packageDir, true);
+    for (const dependency of Object.keys(manifest.optionalDependencies || {})) copyPackage(dependency, packageDir, false);
+  };
+
+  for (const dependency of rootDependencies) copyPackage(dependency, projectDir, true);
+  return true;
+}
+
 function createCodeOnlyArchive(projectDir: string, runtimeName: string, functionName: string): string {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ocdk-code-only-'));
   const archivePath = path.join(tempDir, 'function.zip');
@@ -575,23 +630,10 @@ function createCodeOnlyArchive(projectDir: string, runtimeName: string, function
           return !relative || !excluded.has(relative.split(path.sep)[0]);
         },
       });
-      // OCI does not install Node dependencies for code-only Functions. Node's
-      // resolver can load the archive-root node_modules directory from function/.
+      // OCI does not install Node dependencies for code-only Functions. Copy only
+      // the Function's runtime dependency graph; never bundle OCDK or CDKTF.
       if (isNode) {
-        const nodeModules = path.join(projectDir, 'node_modules');
-        const packageJsonPath = path.join(projectDir, 'package.json');
-        const hasDependencies = fs.existsSync(packageJsonPath)
-          && Object.keys(JSON.parse(fs.readFileSync(packageJsonPath, 'utf8')).dependencies || {}).length > 0;
-        if (hasDependencies && !fs.existsSync(nodeModules)) {
-          throw new Error('Code-only Node.js deployment requires production dependencies in node_modules/. Run npm ci --omit=dev in the function project first.');
-        }
-        if (fs.existsSync(nodeModules)) {
-          fs.cpSync(nodeModules, path.join(tempDir, 'node_modules'), {
-            recursive: true,
-            // The deployment tool itself is not a Function runtime dependency.
-            filter: (source) => !source.includes(`${path.sep}@mikarinneoracle${path.sep}oci-cdk`),
-          });
-        }
+        copyNodeRuntimeDependencies(projectDir, tempDir);
       }
       const result = spawnSync('zip', ['-q', '-r', archivePath, 'function', ...(isNode && fs.existsSync(path.join(tempDir, 'node_modules')) ? ['node_modules'] : [])], { cwd: tempDir, encoding: 'utf8' });
       if (result.status !== 0 || result.error) throw new Error(`Could not create code-only archive: ${result.stderr || result.error?.message || 'zip failed'}`);

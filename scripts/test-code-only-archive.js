@@ -44,6 +44,44 @@ async function main() {
       throw new Error(`archive does not contain function/func.py: ${listed.stderr}`);
     }
 
+    const nodeFixtureDir = path.join(fixtureDir, 'node-function');
+    fs.mkdirSync(path.join(nodeFixtureDir, 'node_modules', '@fnproject', 'fdk'), { recursive: true });
+    fs.mkdirSync(path.join(nodeFixtureDir, 'node_modules', 'runtime-dependency'), { recursive: true });
+    fs.mkdirSync(path.join(nodeFixtureDir, 'node_modules', '@mikarinneoracle', 'oci-cdk'), { recursive: true });
+    fs.writeFileSync(path.join(nodeFixtureDir, 'func.yaml'), [
+      'name: node-archive-smoke-test',
+      'runtime: node',
+      'entrypoint: node func.js',
+      'build_image: fnproject/node:24-dev',
+      '',
+    ].join('\n'));
+    fs.writeFileSync(path.join(nodeFixtureDir, 'func.js'), 'module.exports = () => ({ ok: true });\n');
+    fs.writeFileSync(path.join(nodeFixtureDir, 'package.json'), JSON.stringify({
+      dependencies: { '@fnproject/fdk': '1.0.0', '@mikarinneoracle/oci-cdk': '1.4.3' },
+    }));
+    fs.writeFileSync(path.join(nodeFixtureDir, 'node_modules', '@fnproject', 'fdk', 'package.json'), JSON.stringify({
+      name: '@fnproject/fdk', dependencies: { 'runtime-dependency': '1.0.0' },
+    }));
+    fs.writeFileSync(path.join(nodeFixtureDir, 'node_modules', 'runtime-dependency', 'package.json'), JSON.stringify({ name: 'runtime-dependency' }));
+    fs.writeFileSync(path.join(nodeFixtureDir, 'node_modules', '@mikarinneoracle', 'oci-cdk', 'package.json'), JSON.stringify({ name: '@mikarinneoracle/oci-cdk' }));
+    fs.writeFileSync(path.join(nodeFixtureDir, 'node_modules', '@mikarinneoracle', 'oci-cdk', 'large-tool-file.js'), 'x'.repeat(1024 * 1024));
+
+    process.env.OCI_PROJECT_DIR = nodeFixtureDir;
+    const nodeConfig = await getOciConfig();
+    if (nodeConfig.handler !== 'func.js' || !nodeConfig.codeOnlyArchiveBase64) {
+      throw new Error('Node.js code-only archive configuration was not resolved');
+    }
+    const nodeArchivePath = path.join(nodeFixtureDir, 'function.zip');
+    fs.writeFileSync(nodeArchivePath, Buffer.from(nodeConfig.codeOnlyArchiveBase64, 'base64'));
+    const nodeArchive = spawnSync('unzip', ['-Z1', nodeArchivePath], { encoding: 'utf8' });
+    const nodeEntries = nodeArchive.stdout.split(/\r?\n/);
+    if (nodeArchive.status !== 0 || !nodeEntries.includes('node_modules/@fnproject/fdk/package.json') || !nodeEntries.includes('node_modules/runtime-dependency/package.json')) {
+      throw new Error(`archive is missing a Node.js runtime dependency: ${nodeArchive.stderr}`);
+    }
+    if (nodeEntries.some((entry) => entry.includes('node_modules/@mikarinneoracle/oci-cdk'))) {
+      throw new Error('archive incorrectly contains OCDK tooling files');
+    }
+
     const synthDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ocdk-code-only-synth-'));
     try {
       const repoRoot = path.resolve(__dirname, '..');

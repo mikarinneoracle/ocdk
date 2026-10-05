@@ -8,6 +8,7 @@ const { spawnSync } = require('child_process');
 const fixtureDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ocdk-code-only-test-'));
 const preservedEnv = Object.fromEntries([
   'OCI_PROJECT_DIR', 'OCI_COMPARTMENT_ID', 'OCI_NAMESPACE', 'OCI_DEPLOYMENT_TYPE', 'deployment-type',
+  'OCI_STACK_ACTION', 'CDKTF_OUTDIR',
 ].map((key) => [key, process.env[key]]));
 
 async function main() {
@@ -41,6 +42,34 @@ async function main() {
     const listed = spawnSync('unzip', ['-Z1', archivePath], { encoding: 'utf8' });
     if (listed.status !== 0 || !listed.stdout.split(/\r?\n/).includes('function/func.py')) {
       throw new Error(`archive does not contain function/func.py: ${listed.stderr}`);
+    }
+
+    const synthDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ocdk-code-only-synth-'));
+    try {
+      const repoRoot = path.resolve(__dirname, '..');
+      const synth = spawnSync(process.execPath, [path.join(repoRoot, 'lib/bin/app.js')], {
+        cwd: repoRoot,
+        encoding: 'utf8',
+        env: {
+          ...process.env,
+          OCI_PROJECT_DIR: fixtureDir,
+          OCI_COMPARTMENT_ID: 'ocid1.compartment.oc1..codeonlysmoketest',
+          OCI_NAMESPACE: 'codeonlysmoketest',
+          OCI_STACK_ACTION: 'function-only',
+          CDKTF_OUTDIR: synthDir,
+        },
+      });
+      if (synth.status !== 0) throw new Error(`code-only synthesis failed: ${synth.stderr || synth.stdout}`);
+      const terraform = JSON.parse(fs.readFileSync(path.join(synthDir, 'stacks', 'oci-stack', 'cdk.tf.json'), 'utf8'));
+      if (terraform.resource.oci_artifacts_container_repository) {
+        throw new Error('code-only synthesis unexpectedly created an OCIR repository');
+      }
+      const fn = terraform.resource.oci_functions_function?.Function;
+      if (fn?.image || fn?.source_details?.[0]?.archive_source_details?.[0]?.archive_source_type !== 'DIRECT_ARCHIVE') {
+        throw new Error('code-only synthesis did not use a direct archive Function source');
+      }
+    } finally {
+      fs.rmSync(synthDir, { recursive: true, force: true });
     }
     console.log('Code-only archive smoke test passed.');
   } finally {

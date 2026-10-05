@@ -7,7 +7,7 @@ Quick example (Python function + API Gateway):
 ```bash
 mkdir my-python-function && cd my-python-function
 fn init --runtime python
-npm i --ignore-scripts @mikarinneoracle/oci-cdk
+npm i --loglevel=error --no-fund @mikarinneoracle/oci-cdk
 export OCI_COMPARTMENT_ID='ocid1.compartment.oc1...gq'
 
 # Deploy the function and API Gateway

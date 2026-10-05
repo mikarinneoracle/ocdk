@@ -1,6 +1,6 @@
 {
   "name": "@mikarinneoracle/oci-cdk",
-  "version": "1.4.1",
+  "version": "1.4.2",
   "description": "OCI CDK stack for OCI Functions, API Gateway, and related infrastructure",
   "main": "lib/index.js",
   "bin": {
@@ -55,18 +55,13 @@
     "cdktf": "^0.21.0",
     "cdktf-cli": "^0.21.0",
     "constructs": "^10.0.0",
-    "oci-common": "2.126.0",
-    "oci-logging": "2.126.0",
-    "oci-loggingsearch": "2.126.0",
-    "oci-objectstorage": "2.126.0",
-    "uuid": "3.3.3"
+    "oci-common": "2.142.1",
+    "oci-logging": "2.142.1",
+    "oci-loggingsearch": "2.142.1",
+    "oci-objectstorage": "2.142.1"
   },
   "devDependencies": {
     "@types/node": "^18.0.0",
     "typescript": "^5.0.0"
-  },
-  "overrides": {
-    "jssha": "^3.3.0",
-    "glob": "^13.0.0"
   }
 }
